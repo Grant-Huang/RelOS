@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  # ── 图数据库：存储所有关系 ──────────────────────────────────────
+  neo4j:
+    image: neo4j:5.26-community
+    ports:
+      - "7474:7474"   # Neo4j Browser UI
+      - "7687:7687"   # Bolt protocol（Python driver 使用）
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-relos_dev}"
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_max__size: "1G"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD:-relos_dev}", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 缓存 / 任务队列 ──────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── RelOS API 服务（开发模式，热重载）───────────────────────────
+  api:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-relos_dev}
+      - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENV=development
+    volumes:
+      - .:/app          # 挂载源码，支持热重载
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn relos.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  neo4j_data:
