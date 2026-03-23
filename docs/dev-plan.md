@@ -83,7 +83,7 @@
 | Week 8 | 决策工作流单元测试（22 个）| AI 工程师 | ✅ |
 
 **Sprint 2 交付指标**：
-- ✅ 41 个单元测试（Sprint 1）+ 22 个新测试 = 总计 63 个（目前 41 个已验证）
+- ✅ 41 个单元测试（Sprint 1）+ 64 个新测试 = 总计 **105 个**单元测试
 - ✅ LangGraph 工作流可运行
 - ✅ Action Engine Shadow Mode 完整
 
@@ -121,19 +121,25 @@
 | `_find_existing()` 实现（关系合并语义修复）| 架构师 | ✅ |
 | `datetime.utcnow()` 废弃警告修复 | 全员 | ✅ |
 
-#### Week 12：集成测试 + 客户部署
+#### Week 12：集成测试 + 客户部署 ✅
 
-| 任务 | 负责人 | 预计工作量 |
+| 任务 | 负责人 | 完成状态 |
 |------|--------|----------|
-| 集成测试套件（`tests/integration/`，需要 Neo4j）| 全员 | 3 天 |
-| 客户环境部署文档 | DevOps | 1 天 |
-| 第一家标杆客户上线 Shadow Mode | PM + 全员 | 2 天 |
+| 集成测试套件（`tests/integration/test_decisions_api.py`，8 个 IT）| 全员 | ✅ |
+| 集成测试套件（`tests/integration/test_relations_api.py`，20 个 IT）| 全员 | ✅ |
+| E2E 测试（`tests/e2e/test_alarm_flow.py`，5 大场景 12 个测试）| 全员 | ✅ |
+| Action 记录持久化（`relos/action/repository.py`，Neo4j 存储）| 架构师 | ✅ |
+| 性能测试基准（`tests/performance/locustfile.py`）| 全员 | ✅ |
+| GitHub Actions CI/CD（`.github/workflows/ci.yml`）| DevOps | ✅ |
+| 客户环境部署文档 | DevOps | 🔲 |
+| 第一家标杆客户上线 Shadow Mode | PM + 全员 | 🔲 |
 
 **Sprint 3 成功标准**：
 - [x] Excel 导入 100 条历史告警关系，准确率 > 95%（见 `scripts/import_excel.py --min-accuracy 0.95`）
 - [x] 专家初始化 1 小时内录入 30 条核心关系（`POST /v1/expert-init/batch`）
 - [ ] 第一家客户完成 Shadow Mode 部署
 - [x] LangSmith 中可查看每次 LLM 调用详情（配置 `LANGSMITH_API_KEY` 后自动启用）
+- [x] 集成测试套件（40 个 IT）+ E2E 测试（12 个）全部就绪
 
 ---
 
@@ -191,7 +197,7 @@
 
 | 已知技术债 | 影响 | 计划处理时间 |
 |-----------|------|------------|
-| Action 操作记录存储在内存（`_action_store`）| 服务重启丢失 | Sprint 4（未完成） |
+| Action 操作记录存储在内存（`_action_store`）| 服务重启丢失 | ✅ Sprint 3 Week 12 已修复（`relos/action/repository.py` Neo4j 持久化）|
 | `_find_existing()` 未实现 | 关系合并依赖 MERGE 语义 | ✅ Sprint 3 已修复 |
 | `datetime.utcnow()` 已废弃 | DeprecationWarning | ✅ Sprint 3 已修复 |
 | 无 API 认证 | 安全风险 | ✅ Sprint 4 已修复（JWT 中间件，生产启用 `JWT_ENABLED=True`）|
