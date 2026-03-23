@@ -112,6 +112,48 @@ class TestApplyDecay:
 
         assert decayed >= 0.05
 
+    def test_operator_performs_operation_faster_decay(self) -> None:
+        """T-03：OPERATOR__PERFORMS__OPERATION 半衰期 30 天，衰减应快于 DEVICE__TRIGGERS__ALARM（90 天）"""
+        # 过了 30 天后，operator 关系应比 device 关系衰减更多
+        device_rel = make_relation(
+            confidence=0.8, days_old=30, relation_type="DEVICE__TRIGGERS__ALARM"
+        )
+        operator_rel = make_relation(
+            confidence=0.8, days_old=30, relation_type="OPERATOR__PERFORMS__OPERATION"
+        )
+        device_decayed = self.engine.apply_decay(device_rel)
+        operator_decayed = self.engine.apply_decay(operator_rel)
+
+        # DEVICE half_life=90, OPERATOR half_life=30
+        # 30 天后：device 衰减 0.5^(30/90)≈0.79, operator 衰减 0.5^(30/30)=0.5
+        assert operator_decayed < device_decayed
+
+    def test_component_part_of_device_slow_decay(self) -> None:
+        """T-03：COMPONENT__PART_OF__DEVICE 半衰期 365 天，物理关系衰减最慢"""
+        component_rel = make_relation(
+            confidence=0.8, days_old=90, relation_type="COMPONENT__PART_OF__DEVICE"
+        )
+        device_rel = make_relation(
+            confidence=0.8, days_old=90, relation_type="DEVICE__TRIGGERS__ALARM"
+        )
+        component_decayed = self.engine.apply_decay(component_rel)
+        device_decayed = self.engine.apply_decay(device_rel)
+
+        # COMPONENT half_life=365, 90 天后几乎不衰减；DEVICE half_life=90, 已过半衰期
+        assert component_decayed > device_decayed
+
+    def test_half_life_config_covers_all_relation_types(self) -> None:
+        """T-03：HALF_LIFE_CONFIG 覆盖设计文档中的所有关系类型"""
+        from relos.core.models import HALF_LIFE_CONFIG
+        expected_types = {
+            "DEVICE__TRIGGERS__ALARM",
+            "OPERATOR__PERFORMS__OPERATION",
+            "COMPONENT__PART_OF__DEVICE",
+            "ALARM__CORRELATES__ALARM",
+            "DEFAULT",
+        }
+        assert set(HALF_LIFE_CONFIG.keys()) == expected_types
+
 
 # ─── 人工反馈测试 ──────────────────────────────────────────────────
 

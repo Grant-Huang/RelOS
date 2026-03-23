@@ -49,5 +49,19 @@ class Settings(BaseSettings):
     TEMPORAL_NAMESPACE: str = "default"
     TEMPORAL_TASK_QUEUE: str = "relos-actions"
 
+    # JWT 认证（Sprint 4 Week 15-16）
+    JWT_ENABLED: bool = False                          # 生产环境改为 True
+    JWT_SECRET_KEY: str = "relos-dev-secret-change-in-prod"
+    JWT_ALGORITHM: str = "HS256"
+
+    # 多租户工厂隔离（Sprint 4 Week 15-16）
+    DEFAULT_FACTORY_ID: str = "factory-default"        # 单租户模式默认工厂 ID
+    MULTI_TENANT_ENABLED: bool = False                 # 生产多租户模式
+
+    # API 限流（Sprint 4 Week 15-16）
+    RATE_LIMIT_ENABLED: bool = False                   # 生产环境改为 True
+    RATE_LIMIT_REQUESTS: int = 100                     # 每窗口最大请求数
+    RATE_LIMIT_WINDOW_SECONDS: int = 60               # 限流窗口（秒）
+
 
 settings = Settings()

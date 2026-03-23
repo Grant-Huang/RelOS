@@ -18,9 +18,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j import AsyncGraphDatabase
 
-from relos.api.v1 import decisions, expert_init, health, metrics, relations
+from relos.api.v1 import decisions, expert_init, health, metrics, ontology, relations
 from relos.config import settings
+from relos.middleware.jwt_auth import JWTAuthMiddleware
 from relos.middleware.langsmith_tracing import LangSmithTracingMiddleware, setup_langsmith_tracing
+from relos.middleware.rate_limit import RateLimitMiddleware
 
 logger = structlog.get_logger(__name__)
 
@@ -116,6 +118,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── JWT 认证中间件（Sprint 4 Week 15-16）──────────────────────
+    app.add_middleware(JWTAuthMiddleware)
+
+    # ── API 限流中间件（Sprint 4 Week 15-16）──────────────────────
+    app.add_middleware(RateLimitMiddleware)
+
     # ── LangSmith 追踪中间件（Sprint 3 Week 11）────────────────────
     app.add_middleware(LangSmithTracingMiddleware)
 
@@ -125,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(decisions.router, prefix="/v1/decisions", tags=["decisions"])
     app.include_router(expert_init.router, prefix="/v1/expert-init", tags=["expert-init"])
     app.include_router(metrics.router, prefix="/v1/metrics", tags=["metrics"])
+    app.include_router(ontology.router, prefix="/v1/ontology", tags=["ontology"])
 
     return app
 
