@@ -7,7 +7,7 @@
 
 ---
 
-**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）
+**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景）
 
 ## 目录
 
@@ -16,8 +16,9 @@
 3. [决策分析](#3-决策分析)
 4. [专家初始化（Sprint 3）](#4-专家初始化-sprint-3)
 5. [图谱统计（Sprint 3）](#5-图谱统计-sprint-3)
-6. [错误码](#6-错误码)
-7. [通用 Schema](#7-通用-schema)
+6. [演示场景（Sprint 3 扩展）](#6-演示场景-sprint-3-扩展)
+7. [错误码](#7-错误码)
+8. [通用 Schema](#8-通用-schema)
 
 ---
 
@@ -416,3 +417,209 @@
 | `completed` | 已完成 |
 | `failed` | 已失败 |
 | `rolled_back` | 已回滚 |
+
+---
+
+## 6. 演示场景（Sprint 3 扩展）
+
+> 面向中层（运营）和高层（战略）用户的聚合分析端点。
+> 所有数据均来自 Neo4j 中的 RelationObject，无独立数据库。
+> 演示前需执行：`python scripts/seed_demo_scenarios.py`
+
+### GET /scenarios/line-efficiency
+
+**场景7**：产线效率瓶颈识别。分析各产线效率，定位瓶颈产线及其根因设备。
+
+**响应示例**：
+
+```json
+{
+  "lines": [
+    {"line_id": "line-L2", "name": "产线 L2（焊接线）", "efficiency_pct": 64, "status": "bottleneck"},
+    {"line_id": "line-L3", "name": "产线 L3（装配线）", "efficiency_pct": 81, "status": "normal"},
+    {"line_id": "line-L1", "name": "产线 L1（冲压线）", "efficiency_pct": 92, "status": "normal"}
+  ],
+  "bottleneck_line_id": "line-L2",
+  "bottleneck_reason": "设备 M3 过热告警频繁，停机时间 18.5 小时/7天",
+  "bottleneck_machine_id": "machine-M3",
+  "bottleneck_contribution_pct": 42.0,
+  "root_cause_path": [
+    "设备 machine-M3 停机频繁",
+    "告警：焊接过热告警（7天内 9 次，环比 +80%）",
+    "产线 line-L2 效率损失 28%",
+    "占总延误贡献 42%"
+  ],
+  "confidence": 0.88
+}
+```
+
+---
+
+### GET /scenarios/cross-dept-analysis
+
+**场景8**：跨部门协同问题定位。分析供应链延误的因果路径，计算各部门责任占比。
+
+**响应示例**：
+
+```json
+{
+  "delayed_workorders": [
+    {"workorder_id": "workorder-WO-001", "name": "工单 WO-001", "delay_days": 3, "blocked_by": "优质钢板 Q235"},
+    {"workorder_id": "workorder-WO-002", "name": "工单 WO-002", "delay_days": 3, "blocked_by": "优质钢板 Q235"}
+  ],
+  "delay_attribution": {
+    "采购部门（供应商管理）": 47.8,
+    "生产部门（排产调整）": 21.7,
+    "计划部门（安全库存设置）": 30.5
+  },
+  "causal_chain": [
+    "供应商 A 准时率仅 43%",
+    "Q235 钢板库存降至安全库存 22%",
+    "2 个工单因缺料被迫推迟",
+    "平均每工单延误 3 天"
+  ],
+  "total_delay_days": 6,
+  "confidence": 0.88
+}
+```
+
+---
+
+### GET /scenarios/issue-resolution
+
+**场景9**：异常处理效率分析。对比不同故障类型和班次的处理时间差异。
+
+**响应示例**：
+
+```json
+{
+  "issue_type_summary": [
+    {"display_name": "轴承磨损", "avg_resolution_hours": 2.7, "sample_count": 3, "status": "slow"},
+    {"display_name": "电气故障", "avg_resolution_hours": 1.1, "sample_count": 1, "status": "normal"},
+    {"display_name": "冷却系统", "avg_resolution_hours": 0.7, "sample_count": 1, "status": "normal"}
+  ],
+  "shift_comparison": {
+    "night_avg_hours": 3.0,
+    "day_avg_hours": 1.3,
+    "night_vs_day_ratio": 2.31
+  },
+  "slowest_issue_type": "轴承磨损",
+  "night_vs_day_ratio": 2.31,
+  "insight": "夜班处理时间比白班平均长 131%，轴承类问题最为突出（平均 2.7 小时）",
+  "confidence": 0.85
+}
+```
+
+---
+
+### GET /scenarios/risk-radar
+
+**场景10**：企业级风险雷达。聚合全企业风险信号，输出实时风险评分和因果链。
+
+**响应示例**：
+
+```json
+{
+  "risk_domains": [
+    {"name": "供应链中断风险", "domain": "supply_chain", "score": 0.68, "score_pct": 68, "trend": "rising", "level": "high"},
+    {"name": "质量波动风险",   "domain": "quality",       "score": 0.52, "score_pct": 52, "trend": "stable", "level": "medium"},
+    {"name": "设备稳定性风险", "domain": "equipment",     "score": 0.41, "score_pct": 41, "trend": "rising", "level": "medium"}
+  ],
+  "top_risk": {"name": "供应链中断风险", "score_pct": 68, "top_driver": "supplier-A"},
+  "top_risk_causal_chain": [
+    "供应商 A（华盛钢材）交期不稳定，准时率 43%",
+    "Q235 钢板库存仅剩 22%",
+    "2 个在制工单面临延误，交付承诺风险 ↑"
+  ],
+  "overall_risk_level": "high",
+  "trend": "deteriorating",
+  "confidence": 0.82
+}
+```
+
+---
+
+### GET /scenarios/resource-optimization
+
+**场景11**：资源配置优化。基于问题-资源关系给出 ROI 排序的投入建议。
+
+**响应示例**：
+
+```json
+{
+  "recommendations": [
+    {
+      "rank": 1,
+      "resource_name": "设备维护团队",
+      "roi_pct": 35,
+      "investment_rmb": 360000,
+      "impact_description": "可减少交付延误 41%"
+    },
+    {
+      "rank": 2,
+      "resource_name": "供应商管理专员",
+      "roi_pct": 28,
+      "investment_rmb": 180000,
+      "impact_description": "可减少交付延误 31%"
+    },
+    {
+      "rank": 3,
+      "resource_name": "夜班技能培训",
+      "roi_pct": 22,
+      "investment_rmb": 50000,
+      "impact_description": "可缩短故障处理时间 28%"
+    }
+  ],
+  "total_investment_rmb": 590000,
+  "expected_efficiency_gain_pct": 18.9,
+  "priority_action": "优先投入：设备维护团队（ROI 最高，预计 8 个月回本）",
+  "confidence": 0.80
+}
+```
+
+---
+
+### POST /scenarios/strategic-simulation
+
+**场景12**：战略决策模拟。输入扩产比例，推算对交付风险、故障率、质量的影响。
+
+**请求体**：
+
+```json
+{
+  "expansion_pct": 30,
+  "simulation_horizon_days": 90
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `expansion_pct` | float | 30.0 | 产能扩张比例（%），如 30 表示扩产 30% |
+| `simulation_horizon_days` | int | 90 | 模拟时间窗口（天）|
+
+**响应示例**（`expansion_pct=30`）：
+
+```json
+{
+  "expansion_pct": 30,
+  "delivery_risk_change_pct": 27.0,
+  "failure_rate_change_pct": 18.0,
+  "quality_risk_change_pct": 12.0,
+  "risk_level": "high",
+  "causal_chain": [
+    "订单量 +30%",
+    "产线负载：70% → 91%（+21%）",
+    "设备故障率预计上升 18%（弹性系数 1.8）",
+    "质量缺陷率预计上升 12%",
+    "交付风险综合上升 27%"
+  ],
+  "recommendations": [
+    "建议扩产前完成 M3 维修保养（消除当前 18.5h/周停机隐患）",
+    "将供应商 A 准时率提升至 80% 以上，否则扩产后缺料风险 ×2",
+    "夜班增配有经验维修工（当前夜班经验均值仅 4.2 年）"
+  ],
+  "confidence": 0.78
+}
+```
+
+**注**：模拟基于图中 `CAPACITY__AFFECTS__FAILURE_RATE` 和 `LOAD__INCREASES__RISK` 关系的历史弹性系数，置信度随历史数据积累而提升。

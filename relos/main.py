@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j import AsyncGraphDatabase
 
-from relos.api.v1 import decisions, expert_init, health, metrics, ontology, relations
+from relos.api.v1 import decisions, expert_init, health, metrics, ontology, relations, scenarios
 from relos.config import settings
 from relos.middleware.jwt_auth import JWTAuthMiddleware
 from relos.middleware.langsmith_tracing import LangSmithTracingMiddleware, setup_langsmith_tracing
@@ -134,6 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(expert_init.router, prefix="/v1/expert-init", tags=["expert-init"])
     app.include_router(metrics.router, prefix="/v1/metrics", tags=["metrics"])
     app.include_router(ontology.router, prefix="/v1/ontology", tags=["ontology"])
+    app.include_router(scenarios.router, prefix="/v1/scenarios", tags=["scenarios"])
 
     return app
 

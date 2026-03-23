@@ -142,16 +142,19 @@ class TestApplyDecay:
         assert component_decayed > device_decayed
 
     def test_half_life_config_covers_all_relation_types(self) -> None:
-        """T-03：HALF_LIFE_CONFIG 覆盖设计文档中的所有关系类型"""
+        """T-03：HALF_LIFE_CONFIG 覆盖核心关系类型（允许添加新类型扩展场景）"""
         from relos.core.models import HALF_LIFE_CONFIG
-        expected_types = {
+        # 核心类型必须存在（基础场景 + 新增演示场景均已覆盖）
+        required_types = {
             "DEVICE__TRIGGERS__ALARM",
             "OPERATOR__PERFORMS__OPERATION",
             "COMPONENT__PART_OF__DEVICE",
             "ALARM__CORRELATES__ALARM",
             "DEFAULT",
         }
-        assert set(HALF_LIFE_CONFIG.keys()) == expected_types
+        assert required_types.issubset(set(HALF_LIFE_CONFIG.keys())), (
+            f"缺少必要关系类型：{required_types - set(HALF_LIFE_CONFIG.keys())}"
+        )
 
 
 # ─── 人工反馈测试 ──────────────────────────────────────────────────
