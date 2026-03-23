@@ -137,39 +137,41 @@
 
 ---
 
-### 🔲 Sprint 4：产品化（Week 13–18，计划中）
+### 🔄 Sprint 4：产品化（Week 13–18，进行中）
 
 #### Week 13–14：前端 UI
 
-| 任务 | 优先级 | 工作量 |
-|------|--------|--------|
-| React 项目初始化 + Design System | P0 | 3 天 |
-| 告警根因分析卡片组件 | P0 | 2 天 |
-| HITL 审批界面 | P0 | 3 天 |
-| 专家初始化向导 | P1 | 4 天 |
-| Excel 导入界面 | P1 | 2 天 |
+| 任务 | 优先级 | 工作量 | 完成状态 |
+|------|--------|--------|---------|
+| React 项目初始化 + Design System | P0 | 3 天 | 🔲 |
+| 告警根因分析卡片组件 | P0 | 2 天 | 🔲 |
+| HITL 审批界面 | P0 | 3 天 | 🔲 |
+| 专家初始化向导 | P1 | 4 天 | 🔲 |
+| Excel 导入界面 | P1 | 2 天 | 🔲 |
 
-#### Week 15–16：多租户与安全
+#### Week 15–16：多租户与安全 ✅
 
-| 任务 | 优先级 | 工作量 |
-|------|--------|--------|
-| JWT 认证中间件 | P0 | 3 天 |
-| 工厂级数据隔离（Neo4j 数据库级别）| P0 | 3 天 |
-| API 限流（Redis）| P1 | 2 天 |
-| 操作权限控制（工程师/只读）| P1 | 2 天 |
+| 任务 | 优先级 | 工作量 | 完成状态 |
+|------|--------|--------|---------|
+| JWT 认证中间件（`relos/middleware/jwt_auth.py`）| P0 | 3 天 | ✅ |
+| 工厂级数据隔离（`factory_id` 注入 + Neo4j DB 路由配置）| P0 | 3 天 | ✅ |
+| API 限流（`relos/middleware/rate_limit.py`，Redis 固定窗口）| P1 | 2 天 | ✅ |
+| 操作权限控制（`require_role()` FastAPI 依赖项）| P1 | 2 天 | ✅ |
+| GitHub Actions CI/CD（`.github/workflows/ci.yml`）| P0 | 1 天 | ✅ |
 
-#### Week 17–18：行业本体模板
+#### Week 17–18：行业本体模板 ✅
 
-| 任务 | 优先级 | 工作量 |
-|------|--------|--------|
-| 汽车零部件行业本体模板 | P1 | 5 天 |
-| 3C 电子行业本体模板 | P2 | 5 天 |
-| 模板导入工具 | P1 | 2 天 |
+| 任务 | 优先级 | 工作量 | 完成状态 |
+|------|--------|--------|---------|
+| 汽车零部件行业本体模板（`relos/ontology/templates.py`）| P1 | 5 天 | ✅ |
+| 3C 电子行业本体模板（`relos/ontology/templates.py`）| P2 | 5 天 | ✅ |
+| 模板导入端点（`POST /v1/ontology/templates/{industry}/import`）| P1 | 2 天 | ✅ |
 
 **Sprint 4 成功标准**：
 - [ ] 2 家付费客户正式使用（非 Shadow Mode）
 - [ ] HITL 界面工程师确认率 > 70%
-- [ ] 多租户支持 2 家工厂数据隔离
+- [x] JWT + 多租户基础设施就绪（`JWT_ENABLED=True` 即可启用）
+- [x] 行业本体模板可 dry-run 预览后批量导入
 
 ---
 
@@ -189,12 +191,14 @@
 
 | 已知技术债 | 影响 | 计划处理时间 |
 |-----------|------|------------|
-| Action 操作记录存储在内存（`_action_store`）| 服务重启丢失 | Sprint 3 迁移到 Redis |
+| Action 操作记录存储在内存（`_action_store`）| 服务重启丢失 | Sprint 4（未完成） |
 | `_find_existing()` 未实现 | 关系合并依赖 MERGE 语义 | ✅ Sprint 3 已修复 |
 | `datetime.utcnow()` 已废弃 | DeprecationWarning | ✅ Sprint 3 已修复 |
-| 无 API 认证 | 安全风险 | Sprint 4 |
+| 无 API 认证 | 安全风险 | ✅ Sprint 4 已修复（JWT 中间件，生产启用 `JWT_ENABLED=True`）|
 | Context Engine 未接入 LangSmith | LLM 调用无追踪 | ✅ Sprint 3 已修复 |
 | 重复操作检查（Pre-flight 步骤 5）为占位 | 可能重复执行 | ✅ Sprint 3 已修复（Redis 实现）|
+| HITL 触发条件 2/3 未实现 | 关键 + 冲突场景跳过人工 | ✅ Sprint 4 已修复 |
+| LLM 调用无超时保护 | 超时挂起整个请求 | ✅ Sprint 4 已修复（15s asyncio.wait_for）|
 
 ---
 

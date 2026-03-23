@@ -74,6 +74,44 @@ class TestPruning:
         assert block.relation_count == 1
 
 
+class TestLayer3Prioritization:
+    """T-02：层 3 直接关联优先（设计文档 §5.2 层 3）"""
+
+    def test_direct_relations_appear_before_indirect(self) -> None:
+        """直接关联的关系应排在间接关系之前，即使间接关系置信度更高"""
+        center = "device-001"
+        # 间接关系：置信度更高，但与 center_node 无直接关联
+        indirect = make_relation(src="other-A", tgt="other-B", confidence=0.95)
+        # 直接关系：置信度较低，但与 center_node 直接关联
+        direct = make_relation(src=center, tgt="alarm-001", confidence=0.70)
+
+        compiler = ContextCompiler(max_relations=5)
+        block = compiler.compile([indirect, direct], center_node_id=center)
+
+        # 两条都应出现
+        assert block.relation_count == 2
+        # 直接关联应先出现（ContextBlock 内容中 center 先于 other-A）
+        assert block.content.index(center) < block.content.index("other-A")
+
+    def test_indirect_only_still_included_when_under_max(self) -> None:
+        """间接关系在未超出 max_relations 时仍应被保留"""
+        center = "device-001"
+        indirect = make_relation(src="other-X", tgt="other-Y", confidence=0.8)
+        compiler = ContextCompiler(max_relations=5)
+        block = compiler.compile([indirect], center_node_id=center)
+        assert block.relation_count == 1
+
+    def test_direct_relations_win_when_max_exceeded(self) -> None:
+        """max_relations=1 时，直接关系优先于间接关系保留"""
+        center = "device-001"
+        indirect = make_relation(src="other-A", tgt="other-B", confidence=0.99)
+        direct = make_relation(src=center, tgt="alarm-001", confidence=0.50)
+        compiler = ContextCompiler(max_relations=1)
+        block = compiler.compile([indirect, direct], center_node_id=center)
+        assert block.relation_count == 1
+        assert center in block.content
+
+
 class TestMarkdownOutput:
 
     def test_output_contains_table(self) -> None:

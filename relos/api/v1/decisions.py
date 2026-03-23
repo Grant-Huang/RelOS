@@ -11,7 +11,7 @@ relos/api/v1/decisions.py
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import structlog
@@ -74,7 +74,7 @@ class ActionStatusResponse(BaseModel):
 @router.post("/analyze-alarm", response_model=RootCauseRecommendation)
 async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecommendation:
     """核心端点：告警 → LangGraph 工作流 → 根因推荐。"""
-    t_start = datetime.utcnow()
+    t_start = datetime.now(timezone.utc)
 
     repo = RelationRepository(request.app.state.neo4j_driver)
     relations: list[RelationObject] = await repo.get_subgraph(
@@ -93,6 +93,7 @@ async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecomme
         "context_block": None,
         "avg_confidence": 0.0,
         "engine_path": "hitl" if event.force_hitl else "none",
+        "_rule_engine_no_match": False,
         "recommended_cause": "",
         "confidence": 0.0,
         "reasoning": "",

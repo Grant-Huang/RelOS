@@ -24,6 +24,7 @@ LangGraph 决策工作流：LLM 融合根因分析。
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal, TypedDict
 
 import structlog
@@ -32,6 +33,9 @@ from langgraph.graph import END, StateGraph
 from relos.config import settings
 from relos.context.compiler import ContextBlock, ContextCompiler
 from relos.core.models import RelationObject
+
+# LLM 调用超时（秒）：超出后自动降级 HITL（UX Flow §6.4）
+LLM_TIMEOUT_SECONDS = 15
 
 logger = structlog.get_logger(__name__)
 
@@ -55,6 +59,9 @@ class DecisionState(TypedDict):
     context_block: ContextBlock | None
     avg_confidence: float
     engine_path: Literal["rule_engine", "llm", "hitl", "none"]
+
+    # 中间标志
+    _rule_engine_no_match: bool
 
     # 输出
     recommended_cause: str
@@ -84,7 +91,7 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
         }
 
     # 编译子图为 Prompt block
-    compiler = ContextCompiler(max_relations=15, token_budget=1200)
+    compiler = ContextCompiler(max_relations=15, token_budget=1500)  # 设计规格：architecture.md §3.3
     context_block = compiler.compile(
         relations=relations,
         center_node_id=state["device_id"],
@@ -102,9 +109,21 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
     total_weight = len(direct) * 2 + len(indirect)
     avg_conf = weighted_sum / total_weight if total_weight > 0 else 0.0
 
-    # 决定引擎路径
-    if avg_conf >= settings.RULE_ENGINE_MIN_CONFIDENCE:
-        path: Literal["rule_engine", "llm", "hitl", "none"] = "rule_engine"
+    # ─── 决定引擎路径（含全部六条 HITL 规则）────────────────────────
+    # 规则 2：critical 告警且无高置信度（≥0.75）关系 → HITL
+    has_high_conf = any(r.confidence >= settings.RULE_ENGINE_MIN_CONFIDENCE for r in relations)
+    critical_force_hitl = (
+        state.get("severity", "") == "critical" and not has_high_conf
+    )
+
+    # 规则 3：冲突关系数量 > 2 → HITL
+    conflict_count = sum(1 for r in relations if r.conflict_with)
+    conflict_force_hitl = conflict_count > 2
+
+    if critical_force_hitl or conflict_force_hitl:
+        path: Literal["rule_engine", "llm", "hitl", "none"] = "hitl"
+    elif avg_conf >= settings.RULE_ENGINE_MIN_CONFIDENCE:
+        path = "rule_engine"
     elif avg_conf < settings.HITL_TRIGGER_CONFIDENCE:
         path = "hitl"
     else:
@@ -137,10 +156,10 @@ def node_rule_engine(state: DecisionState) -> dict[str, Any]:
     relations = state["relations"]
     alarm_code = state["alarm_code"]
 
-    # 筛选高置信度的指示性关系
+    # 筛选高置信度的指示性关系（使用配置阈值，与路由层保持一致）
     indicates_rels = [
         r for r in relations
-        if "INDICATES" in r.relation_type and r.confidence >= 0.7
+        if "INDICATES" in r.relation_type and r.confidence >= settings.RULE_ENGINE_MIN_CONFIDENCE
     ]
     indicates_rels.sort(key=lambda r: r.confidence, reverse=True)
 
@@ -163,9 +182,9 @@ def node_rule_engine(state: DecisionState) -> dict[str, Any]:
             "requires_human_review": False,
         }
 
-    # 无指示性关系，降级到 LLM
+    # 无指示性关系：降级到 LLM（规则 5 的前半部分）
     logger.info("rule_engine_no_match", alarm_code=alarm_code, fallback="llm")
-    return {"engine_path": "llm"}
+    return {"engine_path": "llm", "_rule_engine_no_match": True}
 
 
 async def node_llm_analyze(state: DecisionState) -> dict[str, Any]:
@@ -219,16 +238,21 @@ async def node_llm_analyze(state: DecisionState) -> dict[str, Any]:
         f"请分析根因。"
     )
 
+    import json
+
     try:
-        response = await client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=512,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+        # D-04 修复：强制超时 LLM_TIMEOUT_SECONDS 秒，超出自动降级 HITL（UX Flow §6.4）
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model=settings.ANTHROPIC_MODEL,
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            ),
+            timeout=LLM_TIMEOUT_SECONDS,
         )
 
         raw = response.content[0].text.strip()
-        import json
         parsed = json.loads(raw)
 
         # 安全：LLM 输出的置信度上限 0.85（与 RelationObject 的 LLM 约束一致）
@@ -241,16 +265,37 @@ async def node_llm_analyze(state: DecisionState) -> dict[str, Any]:
             tokens_used=response.usage.input_tokens + response.usage.output_tokens,
         )
 
+        # D-02 规则 5：规则引擎无匹配 + LLM confidence < 0.4 → HITL
+        rule_engine_no_match = state.get("_rule_engine_no_match", False)
+        force_hitl_rule5 = rule_engine_no_match and llm_confidence < 0.4
+
         return {
             "recommended_cause": parsed.get("recommended_cause", "LLM 未给出明确根因"),
             "confidence": llm_confidence,
             "reasoning": parsed.get("reasoning", ""),
-            "supporting_relation_ids": [],    # LLM 不直接引用 relation ID
-            "requires_human_review": llm_confidence < settings.HITL_TRIGGER_CONFIDENCE,
+            "supporting_relation_ids": [],
+            "requires_human_review": (
+                force_hitl_rule5 or llm_confidence < settings.HITL_TRIGGER_CONFIDENCE
+            ),
         }
 
+    except asyncio.TimeoutError:
+        logger.warning(
+            "llm_timeout",
+            alarm_id=state["alarm_id"],
+            timeout_seconds=LLM_TIMEOUT_SECONDS,
+            note="自动降级到 HITL（UX Flow §6.4）",
+        )
+        return {
+            "recommended_cause": "LLM 分析超时，已加入人工审核队列",
+            "confidence": 0.0,
+            "reasoning": f"AI 分析超过 {LLM_TIMEOUT_SECONDS}s，已自动降级为 HITL。",
+            "supporting_relation_ids": [],
+            "requires_human_review": True,
+            "error": "llm_timeout",
+        }
     except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("llm_parse_error", error=str(e), raw_response=raw[:200])
+        logger.warning("llm_parse_error", error=str(e))
         return {
             "recommended_cause": "LLM 分析结果格式异常，需人工审核",
             "confidence": 0.0,

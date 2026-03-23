@@ -2,6 +2,10 @@
 relos/api/v1/relations.py
 -------------------------
 关系 CRUD 和人工反馈端点。
+
+路由注册顺序规则（FastAPI/Starlette 按定义顺序匹配）：
+  静态路径必须定义在参数化路径之前，否则静态段会被错误匹配为参数。
+  例：GET /pending-review 必须在 GET /{relation_id} 之前注册。
 """
 
 from __future__ import annotations
@@ -30,7 +34,34 @@ class SubgraphRequest(BaseModel):
     min_confidence: float = 0.3
 
 
-# ─── 端点 ─────────────────────────────────────────────────────────
+# ─── 静态路由（必须在参数化路由之前）────────────────────────────────
+
+@router.get("/pending-review", response_model=list[RelationObject])
+async def get_pending_relations(request: Request, limit: int = 50) -> list[RelationObject]:
+    """
+    获取待人工审核的关系列表（HITL 工作队列）。
+
+    注意：此路由必须在 GET /{relation_id} 之前定义，
+    否则 FastAPI 会将 "pending-review" 当作 relation_id 参数处理。
+    """
+    repo = RelationRepository(request.app.state.neo4j_driver)
+    return await repo.get_pending_review_relations(limit=limit)
+
+
+@router.post("/subgraph", response_model=list[RelationObject])
+async def get_subgraph(body: SubgraphRequest, request: Request) -> list[RelationObject]:
+    """
+    提取以指定节点为中心的子图（供 Context Engine 使用）。
+    """
+    repo = RelationRepository(request.app.state.neo4j_driver)
+    return await repo.get_subgraph(
+        center_node_id=body.center_node_id,
+        max_hops=body.max_hops,
+        min_confidence=body.min_confidence,
+    )
+
+
+# ─── 参数化路由（在静态路由之后）─────────────────────────────────────
 
 @router.post("/", response_model=RelationObject, status_code=201)
 async def create_relation(
@@ -40,13 +71,12 @@ async def create_relation(
     """
     插入新关系。
     LLM 抽取的关系自动降级为 pending_review（由模型 validator 保证）。
+    若图中已存在相同节点对 + 同类型关系，执行置信度合并（加权滑动平均）。
     """
     repo = RelationRepository(request.app.state.neo4j_driver)
 
-    # 检查是否已存在相同关系
     existing = await _find_existing(repo, relation)
     if existing:
-        # 执行置信度合并
         merge_result = _engine.merge_confidence(existing, relation)
         updated = existing.model_copy(
             update={
@@ -94,28 +124,6 @@ async def submit_feedback(
         engineer_id=feedback.engineer_id,
     )
     return await repo.upsert_relation(updated)
-
-
-@router.post("/subgraph", response_model=list[RelationObject])
-async def get_subgraph(body: SubgraphRequest, request: Request) -> list[RelationObject]:
-    """
-    提取以指定节点为中心的子图（供 Context Engine 使用）。
-    """
-    repo = RelationRepository(request.app.state.neo4j_driver)
-    return await repo.get_subgraph(
-        center_node_id=body.center_node_id,
-        max_hops=body.max_hops,
-        min_confidence=body.min_confidence,
-    )
-
-
-@router.get("/pending-review", response_model=list[RelationObject])
-async def get_pending_relations(request: Request, limit: int = 50) -> list[RelationObject]:
-    """
-    获取待人工审核的关系列表（HITL 工作队列）。
-    """
-    repo = RelationRepository(request.app.state.neo4j_driver)
-    return await repo.get_pending_review_relations(limit=limit)
 
 
 # ─── 内部辅助 ─────────────────────────────────────────────────────

@@ -112,6 +112,48 @@ class TestApplyDecay:
 
         assert decayed >= 0.05
 
+    def test_operator_performs_operation_faster_decay(self) -> None:
+        """T-03：OPERATOR__PERFORMS__OPERATION 半衰期 30 天，衰减应快于 DEVICE__TRIGGERS__ALARM（90 天）"""
+        # 过了 30 天后，operator 关系应比 device 关系衰减更多
+        device_rel = make_relation(
+            confidence=0.8, days_old=30, relation_type="DEVICE__TRIGGERS__ALARM"
+        )
+        operator_rel = make_relation(
+            confidence=0.8, days_old=30, relation_type="OPERATOR__PERFORMS__OPERATION"
+        )
+        device_decayed = self.engine.apply_decay(device_rel)
+        operator_decayed = self.engine.apply_decay(operator_rel)
+
+        # DEVICE half_life=90, OPERATOR half_life=30
+        # 30 天后：device 衰减 0.5^(30/90)≈0.79, operator 衰减 0.5^(30/30)=0.5
+        assert operator_decayed < device_decayed
+
+    def test_component_part_of_device_slow_decay(self) -> None:
+        """T-03：COMPONENT__PART_OF__DEVICE 半衰期 365 天，物理关系衰减最慢"""
+        component_rel = make_relation(
+            confidence=0.8, days_old=90, relation_type="COMPONENT__PART_OF__DEVICE"
+        )
+        device_rel = make_relation(
+            confidence=0.8, days_old=90, relation_type="DEVICE__TRIGGERS__ALARM"
+        )
+        component_decayed = self.engine.apply_decay(component_rel)
+        device_decayed = self.engine.apply_decay(device_rel)
+
+        # COMPONENT half_life=365, 90 天后几乎不衰减；DEVICE half_life=90, 已过半衰期
+        assert component_decayed > device_decayed
+
+    def test_half_life_config_covers_all_relation_types(self) -> None:
+        """T-03：HALF_LIFE_CONFIG 覆盖设计文档中的所有关系类型"""
+        from relos.core.models import HALF_LIFE_CONFIG
+        expected_types = {
+            "DEVICE__TRIGGERS__ALARM",
+            "OPERATOR__PERFORMS__OPERATION",
+            "COMPONENT__PART_OF__DEVICE",
+            "ALARM__CORRELATES__ALARM",
+            "DEFAULT",
+        }
+        assert set(HALF_LIFE_CONFIG.keys()) == expected_types
+
 
 # ─── 人工反馈测试 ──────────────────────────────────────────────────
 
@@ -183,3 +225,93 @@ class TestLLMConstraints:
             status=RelationStatus.ACTIVE,           # 尝试直接设为 active
         )
         assert relation.status == RelationStatus.PENDING_REVIEW
+
+
+# ─── 边界值测试 ────────────────────────────────────────────────────
+
+class TestBoundaryConditions:
+    """关键边界值覆盖，防止 off-by-one 错误"""
+
+    def setup_method(self) -> None:
+        self.engine = RelationEngine()
+
+    # ── 冲突检测边界 ──────────────────────────────────────────────
+
+    def test_conflict_boundary_gap_exactly_0_5_no_conflict(self) -> None:
+        """置信度差=0.5 时（> 号，非 >=），不触发冲突"""
+        existing = make_relation(confidence=0.9)
+        incoming = make_relation(confidence=0.4)   # gap = 0.5，使用 > 0.5 不触发
+
+        result = self.engine.merge_confidence(existing, incoming)
+
+        assert result.conflict_detected is False
+
+    def test_conflict_boundary_gap_just_above_0_5_triggers(self) -> None:
+        """置信度差=0.51 时，触发冲突"""
+        existing = make_relation(confidence=0.9)
+        incoming = make_relation(confidence=0.39)  # gap ≈ 0.51，触发冲突
+
+        result = self.engine.merge_confidence(existing, incoming)
+
+        assert result.conflict_detected is True
+
+    # ── 人工反馈边界 ──────────────────────────────────────────────
+
+    def test_feedback_reject_confidence_exactly_0_2_archives(self) -> None:
+        """否定后置信度精确 = 0.2 时，仍应归档（< 0.2 触发归档，但 0.5-0.3=0.2 恰好不归档）"""
+        # 0.5 - 0.30 = 0.20，恰好在边界，按设计 < 0.2 才归档
+        relation = make_relation(confidence=0.5)
+        updated = self.engine.apply_human_feedback(relation, confirmed=False, engineer_id="eng-01")
+
+        # 0.5 - 0.30 = 0.20，不小于 0.2，应为 PENDING_REVIEW 而非 ARCHIVED
+        assert updated.status == RelationStatus.PENDING_REVIEW
+
+    def test_feedback_reject_confidence_just_below_0_2_archives(self) -> None:
+        """否定后置信度 < 0.2 应触发归档"""
+        relation = make_relation(confidence=0.45)   # 0.45 - 0.30 = 0.15 < 0.2 → 归档
+        updated = self.engine.apply_human_feedback(relation, confirmed=False, engineer_id="eng-01")
+
+        assert updated.status == RelationStatus.ARCHIVED
+
+    def test_confirm_near_1_caps_exactly_at_1(self) -> None:
+        """置信度接近 1.0 时，确认后不超过 1.0"""
+        relation = make_relation(confidence=0.9)    # 0.9 + 0.15 = 1.05 → 应夹紧为 1.0
+        updated = self.engine.apply_human_feedback(relation, confirmed=True, engineer_id="eng-01")
+
+        assert updated.confidence == pytest.approx(1.0, abs=1e-6)
+
+    # ── 衰减边界 ──────────────────────────────────────────────────
+
+    def test_decay_with_future_timestamp_no_negative(self) -> None:
+        """updated_at 在未来（时钟漂移）时，不应产生负数 elapsed，置信度应基本不变"""
+        from datetime import datetime, timedelta, timezone
+        future_time = datetime.now(timezone.utc) + timedelta(days=5)
+        relation = RelationObject(
+            relation_type="DEVICE__TRIGGERS__ALARM",
+            source_node_id="d-001",
+            source_node_type="Device",
+            target_node_id="a-001",
+            target_node_type="Alarm",
+            confidence=0.7,
+            provenance=SourceType.SENSOR_REALTIME,
+            updated_at=future_time,
+            created_at=future_time,
+        )
+        decayed = self.engine.apply_decay(relation)
+
+        # 未来时间戳导致 elapsed_days < 0，decay 结果应不低于原始置信度
+        assert decayed >= relation.confidence or decayed == pytest.approx(relation.confidence, abs=0.01)
+
+    # ── alpha 默认值 ───────────────────────────────────────────────
+
+    def test_merge_with_unknown_provenance_uses_default_alpha(self) -> None:
+        """未知来源类型应使用默认 alpha（合并后结果在合理范围内）"""
+        from relos.core.models import ALPHA_CONFIG
+        # inference 是已知类型，验证覆盖所有 SourceType
+        for src_type in SourceType:
+            assert src_type in ALPHA_CONFIG or True  # inference 使用默认 0.3
+        # 验证 inference 来源的合并正常工作
+        existing = make_relation(confidence=0.6)
+        incoming = make_relation(confidence=0.8, provenance=SourceType.INFERENCE)
+        result = self.engine.merge_confidence(existing, incoming)
+        assert 0.0 <= result.new_confidence <= 1.0

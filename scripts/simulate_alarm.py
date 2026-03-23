@@ -80,16 +80,17 @@ async def simulate() -> None:
         print(f"\n  推理依据:")
         print(f"  {result['reasoning']}")
 
-        if result["supporting_relations"]:
+        supporting = result.get("supporting_relation_ids", [])
+        if supporting:
             print(f"\n  支撑关系 ID:")
-            for rel_id in result["supporting_relations"]:
+            for rel_id in supporting:
                 print(f"    - {rel_id}")
 
         print("\n" + "=" * 60)
 
         # Step 4: 模拟工程师反馈（确认根因）
-        if result["supporting_relations"]:
-            rel_id = result["supporting_relations"][0]
+        if supporting:
+            rel_id = supporting[0]
             print(f"\n👷 模拟工程师反馈：确认关系 {rel_id}")
 
             feedback_resp = await client.post(
