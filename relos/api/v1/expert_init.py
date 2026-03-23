@@ -242,7 +242,9 @@ async def expert_init_upload_excel(
         raise HTTPException(status_code=422, detail="仅支持 .xlsx 格式")
 
     content = await file.read()
-    importer = ExcelImporter()
+    # 通过专家初始化端点导入的 Excel 属于工程师手动录入（manual_engineer），
+    # 而非 MES 系统导出（mes_structured），置信度范围应为 0.90–1.0
+    importer = ExcelImporter(default_provenance=SourceType.MANUAL_ENGINEER)
 
     try:
         parse_result = importer.parse_bytes(content)

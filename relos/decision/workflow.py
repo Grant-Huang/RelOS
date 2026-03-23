@@ -91,7 +91,7 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
         }
 
     # 编译子图为 Prompt block
-    compiler = ContextCompiler(max_relations=15, token_budget=1200)
+    compiler = ContextCompiler(max_relations=15, token_budget=1500)  # 设计规格：architecture.md §3.3
     context_block = compiler.compile(
         relations=relations,
         center_node_id=state["device_id"],
@@ -156,10 +156,10 @@ def node_rule_engine(state: DecisionState) -> dict[str, Any]:
     relations = state["relations"]
     alarm_code = state["alarm_code"]
 
-    # 筛选高置信度的指示性关系
+    # 筛选高置信度的指示性关系（使用配置阈值，与路由层保持一致）
     indicates_rels = [
         r for r in relations
-        if "INDICATES" in r.relation_type and r.confidence >= 0.7
+        if "INDICATES" in r.relation_type and r.confidence >= settings.RULE_ENGINE_MIN_CONFIDENCE
     ]
     indicates_rels.sort(key=lambda r: r.confidence, reverse=True)
 
