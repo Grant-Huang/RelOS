@@ -91,7 +91,7 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
         }
 
     # 编译子图为 Prompt block
-    compiler = ContextCompiler(max_relations=15, token_budget=1500)  # 设计规格：architecture.md §3.3
+    compiler = ContextCompiler(max_relations=15, token_budget=1500)  # 设计规格：architecture.md §3.3  # noqa: E501
     context_block = compiler.compile(
         relations=relations,
         center_node_id=state["device_id"],
@@ -279,7 +279,7 @@ async def node_llm_analyze(state: DecisionState) -> dict[str, Any]:
             ),
         }
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(
             "llm_timeout",
             alarm_id=state["alarm_id"],

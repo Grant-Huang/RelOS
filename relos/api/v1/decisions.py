@@ -11,7 +11,7 @@ relos/api/v1/decisions.py
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from relos.action.engine import ActionEngine, ActionRecord
+from relos.action.repository import ActionRepository
 from relos.config import settings
 from relos.core.models import RelationObject
 from relos.core.repository import RelationRepository
@@ -28,7 +29,8 @@ router = APIRouter()
 logger = structlog.get_logger(__name__)
 
 _action_engine = ActionEngine()
-_action_store: dict[str, ActionRecord] = {}
+# 内存缓存：加速同请求内查询；持久化层为 Neo4j（解决重启丢失问题）
+_action_cache: dict[str, ActionRecord] = {}
 
 
 class AlarmEvent(BaseModel):
@@ -74,7 +76,7 @@ class ActionStatusResponse(BaseModel):
 @router.post("/analyze-alarm", response_model=RootCauseRecommendation)
 async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecommendation:
     """核心端点：告警 → LangGraph 工作流 → 根因推荐。"""
-    t_start = datetime.now(timezone.utc)
+    t_start = datetime.now(UTC)
 
     repo = RelationRepository(request.app.state.neo4j_driver)
     relations: list[RelationObject] = await repo.get_subgraph(
@@ -131,7 +133,7 @@ async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecomme
 
 
 @router.post("/execute-action", response_model=ActionStatusResponse)
-async def execute_action(body: ExecuteActionRequest) -> ActionStatusResponse:
+async def execute_action(body: ExecuteActionRequest, request: Request) -> ActionStatusResponse:
     """触发 Action Engine（Shadow Mode：只记录，不实际执行）。"""
     action = _action_engine.create(
         alarm_id=body.alarm_id,
@@ -143,14 +145,23 @@ async def execute_action(body: ExecuteActionRequest) -> ActionStatusResponse:
     action, _ = _action_engine.start_pre_flight(action, body.operator_id)
     if action.status.value == "approved":
         action = _action_engine.execute(action, body.operator_id)
-    _action_store[action.id] = action
+
+    # 持久化到 Neo4j，同时写入内存缓存
+    action_repo = ActionRepository(request.app.state.neo4j_driver)
+    await action_repo.save(action)
+    _action_cache[action.id] = action
+
     return _build_action_response(action)
 
 
 @router.get("/action/{action_id}", response_model=ActionStatusResponse)
-async def get_action_status(action_id: str) -> ActionStatusResponse:
-    """查询操作记录状态。"""
-    action = _action_store.get(action_id)
+async def get_action_status(action_id: str, request: Request) -> ActionStatusResponse:
+    """查询操作记录状态（先查内存缓存，再查 Neo4j）。"""
+    action = _action_cache.get(action_id)
+    if not action:
+        # 内存缓存未命中（服务重启后），从 Neo4j 恢复
+        action_repo = ActionRepository(request.app.state.neo4j_driver)
+        action = await action_repo.get_by_id(action_id)
     if not action:
         raise HTTPException(status_code=404, detail=f"Action {action_id} not found")
     return _build_action_response(action)

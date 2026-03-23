@@ -18,14 +18,12 @@ MVP 演示脚本：模拟设备告警，触发完整的根因分析流程。
 """
 
 import asyncio
-import json
 import sys
 from datetime import datetime
 
 sys.path.insert(0, ".")
 
 import httpx
-
 
 API_BASE = "http://localhost:8000/v1"
 
@@ -51,7 +49,7 @@ async def simulate() -> None:
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-        print(f"\n📡 发送告警事件：")
+        print("\n📡 发送告警事件：")
         print(f"   设备: {alarm_event['device_id']}")
         print(f"   告警码: {alarm_event['alarm_code']}")
         print(f"   描述: {alarm_event['alarm_description']}")
@@ -77,12 +75,12 @@ async def simulate() -> None:
         print(f"  决策引擎:    {result['engine_used']}")
         print(f"  需人工审核:  {'是 ⚠️' if result['requires_human_review'] else '否 ✓'}")
         print(f"  Shadow Mode: {'开启（仅记录，未执行）' if result['shadow_mode'] else '关闭'}")
-        print(f"\n  推理依据:")
+        print("\n  推理依据:")
         print(f"  {result['reasoning']}")
 
         supporting = result.get("supporting_relation_ids", [])
         if supporting:
-            print(f"\n  支撑关系 ID:")
+            print("\n  支撑关系 ID:")
             for rel_id in supporting:
                 print(f"    - {rel_id}")
 

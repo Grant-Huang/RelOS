@@ -13,7 +13,7 @@ Sprint 3 Week 11：可观测性 — /v1/metrics 端点。
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
@@ -69,5 +69,5 @@ async def get_metrics(request: Request) -> GraphMetrics:
         archived_count=raw["archived_count"],
         active_ratio=active_ratio,
         review_backlog=raw["pending_review_count"],
-        collected_at=datetime.now(timezone.utc),
+        collected_at=datetime.now(UTC),
     )

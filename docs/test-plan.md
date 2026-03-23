@@ -24,12 +24,12 @@
 
 ### 1.2 测试目标
 
-| 测试类型 | 目标 | 当前状态 | Sprint 3 目标 |
+| 测试类型 | 目标 | 当前状态（Sprint 3 Week 12）| Sprint 4 目标 |
 |---------|------|---------|--------------|
-| 单元测试 | 核心算法逻辑正确性 | 41 个，全部通过 | 80 个 |
-| 集成测试 | API + 数据库联动 | 0 个 | 20 个 |
-| E2E 测试 | 完整用户场景 | 0 个 | 5 个 |
-| 性能测试 | 响应时间 + 并发 | 未测量 | 基准建立 |
+| 单元测试 | 核心算法逻辑正确性 | **105 个**，全部通过 | 120 个 |
+| 集成测试 | API + 数据库联动 | **40 个**（Sprint 3 新增）| 60 个 |
+| E2E 测试 | 完整用户场景 | **12 个**（5 大场景全覆盖）| 15 个 |
+| 性能测试 | 响应时间 + 并发 | locustfile.py 基准建立 | P95 验证 |
 | 安全测试 | 注入/越权 | 未测试 | Sprint 4 |
 
 ### 1.3 覆盖率目标
@@ -47,7 +47,7 @@
 
 ## 2. 现有单元测试（41 个）
 
-### 2.1 `tests/unit/test_core/test_engine.py`（17 个）
+### 2.1 `tests/unit/test_core/test_engine.py`（23 个）
 
 | 测试类 | 测试方法 | 测试目标 |
 |--------|---------|---------|
@@ -65,7 +65,7 @@
 | TestLLMConstraints | test_llm_confidence_capped_at_0_85 | LLM 置信度硬上限 |
 | | test_llm_relation_forced_pending | LLM 关系强制 pending_review |
 
-### 2.2 `tests/unit/test_context/test_compiler.py`（6 个）
+### 2.2 `tests/unit/test_context/test_compiler.py`（9 个）
 
 | 测试类 | 测试方法 | 测试目标 |
 |--------|---------|---------|
@@ -92,7 +92,7 @@
 | | test_execute_requires_approved_status | 只有 APPROVED 可执行 |
 | | test_shadow_mode_default_is_true | Shadow Mode 默认 True |
 
-### 2.4 `tests/unit/test_core/test_decision_workflow.py`（11 个，部分）
+### 2.4 `tests/unit/test_core/test_decision_workflow.py`（21 个）
 
 | 测试类 | 测试方法 | 测试目标 |
 |--------|---------|---------|
@@ -106,6 +106,17 @@
 | | test_critical_severity_in_reasoning | critical 在推理说明中 |
 | TestNodeNoData | test_no_data_suggests_expert_init | 提示专家初始化 |
 | TestRouting | test_route_by_engine_path | 四路路由正确分流 |
+
+### 2.5 新增单元测试（Sprint 3）
+
+| 测试文件 | 数量 | 覆盖内容 |
+|---------|------|---------|
+| `test_ingestion/test_excel_importer.py` | 15 | 列映射、行解析、端到端解析、ImportResult 统计 |
+| `test_ingestion/test_pipeline.py` | 16 | 多来源验证、LLM 约束、AlarmRelationExtractor |
+| `test_api/test_route_order.py` | 3 | pending-review 路由遮蔽回归 |
+| `test_core/test_redis_dedup.py` | 7 | Redis 去重、降级行为 |
+
+**单元测试总计：105 个**
 
 ---
 
@@ -134,7 +145,7 @@ async def neo4j_driver():
     await driver.close()
 ```
 
-### 3.2 集成测试用例设计（20 个）
+### 3.2 集成测试用例设计（已实现 40 个）
 
 #### 关系 API 集成测试（8 个）
 
@@ -173,9 +184,9 @@ async def neo4j_driver():
 
 ---
 
-## 4. E2E 测试计划（Sprint 3）
+## 4. E2E 测试（Sprint 3 Week 12 完成）
 
-### 4.1 E2E 测试场景（5 个核心场景）
+### 4.1 E2E 测试场景（5 大场景，12 个测试，全部实现）
 
 | 场景 ID | 场景名称 | 步骤 | 成功标准 |
 |---------|---------|------|---------|

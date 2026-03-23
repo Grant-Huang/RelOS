@@ -249,9 +249,9 @@ async def expert_init_upload_excel(
     try:
         parse_result = importer.parse_bytes(content)
     except ImportError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     saved_relations: list[RelationObject] = []
 

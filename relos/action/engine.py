@@ -27,8 +27,8 @@ Shadow Mode（MVP 默认开启）：
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 import structlog
@@ -41,7 +41,7 @@ logger = structlog.get_logger(__name__)
 # 状态枚举（八状态机）
 # ─────────────────────────────────────────────
 
-class ActionStatus(str, Enum):
+class ActionStatus(StrEnum):
     PENDING          = "pending"           # 待执行，刚创建
     PRE_FLIGHT_CHECK = "pre_flight_check"  # 执行前五步验证
     APPROVED         = "approved"          # 验证通过，等待执行
@@ -58,7 +58,7 @@ class ActionStatus(str, Enum):
 
 class ActionLog(BaseModel):
     """状态转换日志（只追加，不可变）。"""
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     from_status: ActionStatus
     to_status: ActionStatus
     operator_id: str
@@ -79,8 +79,8 @@ class ActionRecord(BaseModel):
     shadow_mode: bool = True            # MVP 默认 True：只记录，不执行
     logs: list[ActionLog] = Field(default_factory=list)
     pre_flight_results: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ─────────────────────────────────────────────
@@ -97,7 +97,7 @@ _DEDUP_TTL_SECONDS = 86400
 _DEDUP_KEY_PREFIX = "relos:action:dedup"
 
 
-def _check_no_duplicate_via_redis(action: "ActionRecord") -> bool:
+def _check_no_duplicate_via_redis(action: ActionRecord) -> bool:
     """
     检查 24 小时内是否已有相同 alarm_id + device_id 的操作记录。
 
@@ -349,7 +349,7 @@ class ActionEngine:
         )
         action.logs.append(log_entry)
         action.status = new_status
-        action.updated_at = datetime.now(timezone.utc)
+        action.updated_at = datetime.now(UTC)
 
         logger.info(
             "action_state_transition",

@@ -14,7 +14,6 @@ import pytest
 
 from relos.action.engine import (
     ActionRecord,
-    PreFlightResult,
     _check_no_duplicate_via_redis,
     run_pre_flight_checks,
 )
@@ -73,7 +72,6 @@ class TestRedisDeduplication:
         mock_redis_module.from_url.side_effect = ConnectionError("Redis unreachable")
 
         with patch.dict("sys.modules", {"redis": mock_redis_module}):
-            import sys
             # 强制重新执行函数，让其从 sys.modules 中拿到 mock
             result = _check_no_duplicate_via_redis(action)
         assert result is True  # 降级通过

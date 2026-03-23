@@ -27,7 +27,6 @@ from relos.config import settings
 from relos.core.models import RelationObject, RelationStatus, SourceType
 from relos.core.repository import RelationRepository
 
-
 # ─── 测试数据定义 ──────────────────────────────────────────────────
 
 # 节点（设备、告警、部件、操作员）
@@ -150,7 +149,9 @@ async def seed() -> None:
     print(f"\n🔗 注入 {len(RELATIONS)} 条关系...")
     for rel in RELATIONS:
         await repo.upsert_relation(rel)
-        print(f"   ✓ [{rel.confidence:.2f}] {rel.source_node_id} --{rel.relation_type}--> {rel.target_node_id}")
+        src = rel.source_node_id
+        tgt = rel.target_node_id
+        print(f"   ✓ [{rel.confidence:.2f}] {src} --{rel.relation_type}--> {tgt}")
 
     await driver.close()
 

@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any
 
 import structlog
@@ -148,10 +147,10 @@ class ExcelImporter:
         """
         try:
             import openpyxl
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "Excel 导入需要 openpyxl 库，请运行: pip install openpyxl>=3.1.0"
-            )
+            ) from exc
 
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
@@ -166,10 +165,10 @@ class ExcelImporter:
         """
         try:
             import openpyxl
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "Excel 导入需要 openpyxl 库，请运行: pip install openpyxl>=3.1.0"
-            )
+            ) from exc
 
         wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
