@@ -30,6 +30,15 @@ dependencies = [
     "structlog>=24.4.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
+
+    # Sprint 3: Excel 批量导入
+    "openpyxl>=3.1.0",
+
+    # Sprint 3: Temporal.io 工作流（生产执行路径）
+    "temporalio>=1.7.0",
+
+    # Sprint 3: LangSmith LLM 追踪（可观测性）
+    "langsmith>=0.1.0",
 ]
 
 [project.optional-dependencies]

@@ -7,13 +7,17 @@
 
 ---
 
+**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）
+
 ## 目录
 
 1. [健康检查](#1-健康检查)
 2. [关系管理](#2-关系管理)
 3. [决策分析](#3-决策分析)
-4. [错误码](#4-错误码)
-5. [通用 Schema](#5-通用-schema)
+4. [专家初始化（Sprint 3）](#4-专家初始化-sprint-3)
+5. [图谱统计（Sprint 3）](#5-图谱统计-sprint-3)
+6. [错误码](#6-错误码)
+7. [通用 Schema](#7-通用-schema)
 
 ---
 
@@ -265,7 +269,109 @@
 
 ---
 
-## 4. 错误码
+---
+
+## 4. 专家初始化（Sprint 3）
+
+### POST /expert-init
+
+专家录入单条关系知识。来源自动标记为 `manual_engineer`，状态直接设为 `active`（无需 pending_review）。
+
+**请求体**：
+```json
+{
+  "source_node_id": "CNC-M1",
+  "source_node_type": "Device",
+  "target_node_id": "ALM-BEARING",
+  "target_node_type": "Alarm",
+  "relation_type": "DEVICE__TRIGGERS__ALARM",
+  "confidence": 0.92,
+  "provenance_detail": "维修工单 WO-2026-001",
+  "engineer_id": "zhang-engineer",
+  "half_life_days": 365,
+  "properties": {"frequency": 5, "severity": "high"}
+}
+```
+
+**响应** `201 Created`：
+```json
+{
+  "relation": { ...RelationObject },
+  "is_new": true,
+  "message": "关系已创建"
+}
+```
+
+---
+
+### POST /expert-init/batch
+
+批量录入关系（最多 100 条）。每条独立处理，单条失败不影响其他条。
+
+**请求体**：ExpertRelationInput 数组
+
+**响应** `200 OK`：
+```json
+{
+  "success_count": 28,
+  "failed_count": 2,
+  "relations": [...],
+  "errors": [{"index": 5, "error": "..."}]
+}
+```
+
+---
+
+### POST /expert-init/upload-excel
+
+上传 Excel 文件批量导入关系。
+
+**Query 参数**：
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `engineer_id` | string | 录入工程师 ID |
+| `dry_run` | boolean | 只验证不写库，默认 false |
+
+**Excel 格式**（支持中英文列名）：
+
+| source_node_id | source_node_type | target_node_id | target_node_type | relation_type | confidence |
+|---|---|---|---|---|---|
+| CNC-M1 | Device | ALM-001 | Alarm | DEVICE__TRIGGERS__ALARM | 0.85 |
+
+**响应**：同 `/expert-init/batch`
+
+---
+
+## 5. 图谱统计（Sprint 3）
+
+### GET /metrics
+
+获取关系图谱健康度和规模统计。
+
+**响应** `200 OK`：
+```json
+{
+  "total_nodes": 128,
+  "total_relations": 347,
+  "avg_confidence": 0.7831,
+  "active_count": 289,
+  "pending_review_count": 42,
+  "conflicted_count": 8,
+  "archived_count": 8,
+  "active_ratio": 0.833,
+  "review_backlog": 42,
+  "collected_at": "2026-03-23T10:00:00Z"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `active_ratio` | 激活关系比例（active / total），越高代表数据质量越好 |
+| `review_backlog` | 待审核积压量，建议保持 < 50 |
+
+---
+
+## 6. 错误码
 
 | HTTP 状态码 | 错误场景 | 响应示例 |
 |------------|---------|---------|
@@ -277,7 +383,7 @@
 
 ---
 
-## 5. 通用 Schema
+## 7. 通用 Schema
 
 ### SourceType 枚举
 
