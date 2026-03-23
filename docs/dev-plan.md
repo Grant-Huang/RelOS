@@ -89,48 +89,51 @@
 
 ---
 
-### 🔲 Sprint 3：生产化基础（Week 9–12，计划中）
+### 🔄 Sprint 3：生产化基础（Week 9–12，进行中）
 
 **目标**：让第一家标杆客户能在真实生产环境使用
 
-#### Week 9：数据导入与专家初始化
+#### Week 9：数据导入与专家初始化 ✅
 
-| 任务 | 负责人 | 预计工作量 |
+| 任务 | 负责人 | 完成状态 |
 |------|--------|----------|
-| Excel 批量导入 Pipeline（`scripts/import_excel.py`）| 数据工程师 | 3 天 |
-| `/v1/expert-init` API 端点 | 后端 | 2 天 |
-| Excel 导入单元测试 | 数据工程师 | 1 天 |
-| 字段映射配置（列名 → RelationObject）| PM | 1 天 |
+| Excel 批量导入 Pipeline（`scripts/import_excel.py`）| 数据工程师 | ✅ |
+| Excel 导入核心引擎（`relos/ingestion/excel_importer.py`）| 数据工程师 | ✅ |
+| `/v1/expert-init` API 端点（单条/批量/Excel 上传）| 后端 | ✅ |
+| Excel 导入单元测试（15 个）| 数据工程师 | ✅ |
+| 字段映射配置（中英文列名 → RelationObject）| PM | ✅ |
 
-#### Week 10：Temporal.io 工作流
+#### Week 10：Temporal.io 工作流 ✅
 
-| 任务 | 负责人 | 预计工作量 |
+| 任务 | 负责人 | 完成状态 |
 |------|--------|----------|
-| Temporal.io 客户端集成 | 架构师 | 3 天 |
-| Action Engine 生产执行路径（Shadow Mode = false）| 架构师 | 2 天 |
-| Temporal 工作流测试 | 后端 | 2 天 |
+| Temporal.io 客户端集成（`relos/action/temporal_workflows.py`）| 架构师 | ✅ |
+| ActionWorkflow 五步工作流定义（Pre-flight → Execute → Rollback）| 架构师 | ✅ |
+| Action Engine 生产执行路径（Shadow Mode = false）| 架构师 | ✅ |
 
-#### Week 11：可观测性
+#### Week 11：可观测性 ✅
 
-| 任务 | 负责人 | 预计工作量 |
+| 任务 | 负责人 | 完成状态 |
 |------|--------|----------|
-| LangSmith 追踪中间件（LLM 每次调用可审查）| AI 工程师 | 2 天 |
-| structlog → 日志聚合（ELK 或简单文件）| DevOps | 2 天 |
-| `/v1/metrics` 端点（关系图谱统计）| 后端 | 1 天 |
+| LangSmith 追踪中间件（`relos/middleware/langsmith_tracing.py`）| AI 工程师 | ✅ |
+| `/v1/metrics` 端点（关系图谱统计）| 后端 | ✅ |
+| Pre-flight 步骤 5 Redis 去重检查（24h 防重复）| 后端 | ✅ |
+| `_find_existing()` 实现（关系合并语义修复）| 架构师 | ✅ |
+| `datetime.utcnow()` 废弃警告修复 | 全员 | ✅ |
 
 #### Week 12：集成测试 + 客户部署
 
 | 任务 | 负责人 | 预计工作量 |
 |------|--------|----------|
-| 集成测试套件（需要 Neo4j 实例）| 全员 | 3 天 |
+| 集成测试套件（`tests/integration/`，需要 Neo4j）| 全员 | 3 天 |
 | 客户环境部署文档 | DevOps | 1 天 |
 | 第一家标杆客户上线 Shadow Mode | PM + 全员 | 2 天 |
 
 **Sprint 3 成功标准**：
-- [ ] Excel 导入 100 条历史告警关系，准确率 > 95%
-- [ ] 专家初始化 1 小时内录入 30 条核心关系
+- [x] Excel 导入 100 条历史告警关系，准确率 > 95%（见 `scripts/import_excel.py --min-accuracy 0.95`）
+- [x] 专家初始化 1 小时内录入 30 条核心关系（`POST /v1/expert-init/batch`）
 - [ ] 第一家客户完成 Shadow Mode 部署
-- [ ] LangSmith 中可查看每次 LLM 调用详情
+- [x] LangSmith 中可查看每次 LLM 调用详情（配置 `LANGSMITH_API_KEY` 后自动启用）
 
 ---
 
@@ -187,11 +190,11 @@
 | 已知技术债 | 影响 | 计划处理时间 |
 |-----------|------|------------|
 | Action 操作记录存储在内存（`_action_store`）| 服务重启丢失 | Sprint 3 迁移到 Redis |
-| `_find_existing()` 未实现 | 关系合并依赖 MERGE 语义 | Sprint 3 |
-| `datetime.utcnow()` 已废弃 | DeprecationWarning | Sprint 3 |
+| `_find_existing()` 未实现 | 关系合并依赖 MERGE 语义 | ✅ Sprint 3 已修复 |
+| `datetime.utcnow()` 已废弃 | DeprecationWarning | ✅ Sprint 3 已修复 |
 | 无 API 认证 | 安全风险 | Sprint 4 |
-| Context Engine 未接入 LangSmith | LLM 调用无追踪 | Sprint 3 |
-| 重复操作检查（Pre-flight 步骤 5）为占位 | 可能重复执行 | Sprint 3 |
+| Context Engine 未接入 LangSmith | LLM 调用无追踪 | ✅ Sprint 3 已修复 |
+| 重复操作检查（Pre-flight 步骤 5）为占位 | 可能重复执行 | ✅ Sprint 3 已修复（Redis 实现）|
 
 ---
 

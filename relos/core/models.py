@@ -13,7 +13,7 @@ RelOS 的核心数据模型。
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -108,8 +108,8 @@ class RelationObject(BaseModel):
     )
 
     # ── 时间与衰减 ────────────────────────────
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     half_life_days: int = Field(
         default=90,
         description="置信度半衰期（天）。按关系类型配置：设备告警 90 天，操作员操作 30 天"
@@ -160,7 +160,7 @@ class Node(BaseModel):
     node_type: str = Field(description="节点类型，例如 Device, Alarm, Operator, Component")
     name: str = Field(description="节点人类可读名称")
     properties: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ─────────────────────────────────────────────

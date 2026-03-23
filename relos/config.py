@@ -39,5 +39,15 @@ class Settings(BaseSettings):
     # Shadow Mode（MVP 默认开启：只记录不执行）
     SHADOW_MODE: bool = True
 
+    # LangSmith 追踪（Sprint 3 Week 11）
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "relos-production"
+    LANGSMITH_ENABLED: bool = False     # 配置 API Key 后改为 True
+
+    # Temporal.io 工作流（Sprint 3 Week 10）
+    TEMPORAL_HOST: str = "localhost:7233"
+    TEMPORAL_NAMESPACE: str = "default"
+    TEMPORAL_TASK_QUEUE: str = "relos-actions"
+
 
 settings = Settings()

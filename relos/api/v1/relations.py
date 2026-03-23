@@ -125,6 +125,8 @@ async def _find_existing(
     incoming: RelationObject,
 ) -> RelationObject | None:
     """查找图中是否已存在相同的关系（同节点对 + 同类型）。"""
-    # TODO: 实现按 source_node_id + target_node_id + relation_type 查询
-    # MVP 阶段暂时依赖 upsert 的 MERGE 语义
-    return None
+    return await repo.find_relation(
+        source_node_id=incoming.source_node_id,
+        target_node_id=incoming.target_node_id,
+        relation_type=incoming.relation_type,
+    )

@@ -27,7 +27,7 @@ Shadow Mode（MVP 默认开启）：
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -58,7 +58,7 @@ class ActionStatus(str, Enum):
 
 class ActionLog(BaseModel):
     """状态转换日志（只追加，不可变）。"""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     from_status: ActionStatus
     to_status: ActionStatus
     operator_id: str
@@ -79,13 +79,56 @@ class ActionRecord(BaseModel):
     shadow_mode: bool = True            # MVP 默认 True：只记录，不执行
     logs: list[ActionLog] = Field(default_factory=list)
     pre_flight_results: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ─────────────────────────────────────────────
 # Pre-flight Check（五步验证）
 # ─────────────────────────────────────────────
+
+# ─────────────────────────────────────────────
+# Redis 重复检查辅助（步骤 5）
+# ─────────────────────────────────────────────
+
+# Redis key 格式：relos:action:dedup:{alarm_id}:{device_id}
+# TTL：86400 秒 = 24 小时
+_DEDUP_TTL_SECONDS = 86400
+_DEDUP_KEY_PREFIX = "relos:action:dedup"
+
+
+def _check_no_duplicate_via_redis(action: "ActionRecord") -> bool:
+    """
+    检查 24 小时内是否已有相同 alarm_id + device_id 的操作记录。
+
+    使用同步 Redis（engine 为纯计算模块，不依赖异步运行时）。
+    若 Redis 不可用，降级为通过（避免 Redis 故障阻断正常流程）。
+    """
+    try:
+        import redis as redis_lib
+
+        from relos.config import settings
+        r = redis_lib.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        key = f"{_DEDUP_KEY_PREFIX}:{action.alarm_id}:{action.device_id}"
+        existing = r.get(key)
+        if existing:
+            logger.warning(
+                "pre_flight_duplicate_detected",
+                alarm_id=action.alarm_id,
+                device_id=action.device_id,
+                existing_action_id=existing.decode(),
+            )
+            return False
+        # 写入去重标记（TTL 24h）
+        r.setex(key, _DEDUP_TTL_SECONDS, action.id)
+        return True
+    except ImportError:
+        logger.warning("redis_not_installed", note="pip install redis[hiredis]>=5.2.0")
+        return True  # 降级：通过
+    except Exception as exc:
+        logger.warning("redis_dedup_check_failed", error=str(exc)[:100])
+        return True  # 降级：通过（Redis 故障不阻断操作）
+
 
 class PreFlightResult(BaseModel):
     passed: bool
@@ -140,9 +183,8 @@ def run_pre_flight_checks(action: ActionRecord) -> PreFlightResult:
             "MVP 阶段仅允许建议性操作（检查/确认类），控制类操作需升级 Shadow Mode 配置"
         )
 
-    # 检查 5：重复操作（MVP 简化：仅检查 alarm_id 是否已处理）
-    # TODO: 接入 Redis，检查 24 小时内同 alarm_id 的操作记录
-    checks["no_duplicate"] = True   # MVP 占位，默认通过
+    # 检查 5：重复操作 — 接入 Redis，检查 24 小时内同 alarm_id 的操作记录
+    checks["no_duplicate"] = _check_no_duplicate_via_redis(action)
 
     all_passed = all(checks.values())
 
@@ -248,11 +290,34 @@ class ActionEngine:
                 reason="[Shadow Mode] 操作已记录，未实际执行"
             )
         else:
-            # 生产模式（Sprint 3：接入 Temporal.io 工作流）
-            # TODO: await temporal_client.start_workflow(...)
-            raise NotImplementedError(
-                "生产执行模式在 Sprint 3 实现（需 Temporal.io 集成）"
-            )
+            # 生产模式：通过 Temporal.io 工作流执行，获得持久化状态和自动重试
+            try:
+                from relos.action.temporal_workflows import (
+                    ActionWorkflowInput,
+                    temporal_client,
+                )
+                workflow_input = ActionWorkflowInput(
+                    action_id=action.id,
+                    alarm_id=action.alarm_id,
+                    device_id=action.device_id,
+                    action_description=action.action_description,
+                    recommended_cause=action.recommended_cause,
+                    operator_id=operator_id,
+                )
+                import asyncio
+                workflow_id = asyncio.get_event_loop().run_until_complete(
+                    temporal_client.start_action_workflow(workflow_input)
+                )
+                action = self._transition(
+                    action, ActionStatus.COMPLETED, operator_id,
+                    reason=f"[Production] Temporal workflow started: {workflow_id}"
+                )
+            except RuntimeError as exc:
+                action = self._transition(
+                    action, ActionStatus.FAILED, operator_id,
+                    reason=f"Temporal 启动失败: {exc}"
+                )
+                raise
 
         return action
 
@@ -284,7 +349,7 @@ class ActionEngine:
         )
         action.logs.append(log_entry)
         action.status = new_status
-        action.updated_at = datetime.utcnow()
+        action.updated_at = datetime.now(timezone.utc)
 
         logger.info(
             "action_state_transition",

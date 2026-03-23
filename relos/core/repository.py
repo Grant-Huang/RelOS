@@ -165,6 +165,65 @@ class RelationRepository:
         )
         return relations
 
+    async def find_relation(
+        self,
+        source_node_id: str,
+        target_node_id: str,
+        relation_type: str,
+    ) -> RelationObject | None:
+        """
+        按节点对 + 关系类型查找已存在的关系（用于合并逻辑）。
+        """
+        query = f"""
+        MATCH (src {{id: $src_id}})-[r:{relation_type} {{}}]->(tgt {{id: $tgt_id}})
+        RETURN r, type(r) AS rel_type,
+               startNode(r).id AS src_id, startNode(r).node_type AS src_type,
+               endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type
+        LIMIT 1
+        """
+        async with self._driver.session(database=self._db) as session:
+            result = await session.run(
+                query,
+                src_id=source_node_id,
+                tgt_id=target_node_id,
+            )
+            record = await result.single()
+            if not record:
+                return None
+            return self._record_to_relation(record)
+
+    async def get_graph_metrics(self) -> dict[str, Any]:
+        """
+        获取关系图谱统计信息，供 /v1/metrics 端点使用。
+        """
+        query = """
+        MATCH ()-[r]->()
+        RETURN
+            count(r) AS total_relations,
+            avg(r.confidence) AS avg_confidence,
+            count(CASE WHEN r.status = 'active' THEN 1 END) AS active_count,
+            count(CASE WHEN r.status = 'pending_review' THEN 1 END) AS pending_review_count,
+            count(CASE WHEN r.status = 'conflicted' THEN 1 END) AS conflicted_count,
+            count(CASE WHEN r.status = 'archived' THEN 1 END) AS archived_count
+        """
+        node_query = "MATCH (n) RETURN count(n) AS total_nodes"
+
+        async with self._driver.session(database=self._db) as session:
+            rel_result = await session.run(query)
+            rel_record = await rel_result.single()
+            node_result = await session.run(node_query)
+            node_record = await node_result.single()
+
+        return {
+            "total_nodes": node_record["total_nodes"] if node_record else 0,
+            "total_relations": rel_record["total_relations"] if rel_record else 0,
+            "avg_confidence": round(rel_record["avg_confidence"] or 0.0, 4) if rel_record else 0.0,
+            "active_count": rel_record["active_count"] if rel_record else 0,
+            "pending_review_count": rel_record["pending_review_count"] if rel_record else 0,
+            "conflicted_count": rel_record["conflicted_count"] if rel_record else 0,
+            "archived_count": rel_record["archived_count"] if rel_record else 0,
+        }
+
     async def get_pending_review_relations(
         self,
         limit: int = 50,

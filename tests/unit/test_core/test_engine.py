@@ -5,7 +5,7 @@ RelationEngine 单元测试。
 无外部依赖（纯计算逻辑）。
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -22,7 +22,7 @@ def make_relation(
     relation_type: str = "DEVICE__TRIGGERS__ALARM",
     days_old: int = 0,
 ) -> RelationObject:
-    now = datetime.utcnow() - timedelta(days=days_old)
+    now = datetime.now(timezone.utc) - timedelta(days=days_old)
     return RelationObject(
         relation_type=relation_type,
         source_node_id="device-001",

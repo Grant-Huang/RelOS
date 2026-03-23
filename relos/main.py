@@ -18,8 +18,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j import AsyncGraphDatabase
 
-from relos.api.v1 import decisions, health, relations
+from relos.api.v1 import decisions, expert_init, health, metrics, relations
 from relos.config import settings
+from relos.middleware.langsmith_tracing import LangSmithTracingMiddleware, setup_langsmith_tracing
 
 logger = structlog.get_logger(__name__)
 
@@ -44,11 +45,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 创建图约束（幂等操作，重启安全）
     await _create_graph_constraints(app.state.neo4j_driver)
 
+    # 初始化 LangSmith 追踪（Sprint 3 Week 11）
+    langsmith_enabled = setup_langsmith_tracing(
+        project=settings.LANGSMITH_PROJECT,
+        enabled=settings.LANGSMITH_ENABLED,
+    )
+    app.state.langsmith_enabled = langsmith_enabled
+
+    # 初始化 Temporal.io 客户端（Sprint 3 Week 10）
+    if not settings.SHADOW_MODE:
+        from relos.action.temporal_workflows import temporal_client
+        await temporal_client.connect()
+        app.state.temporal_client = temporal_client
+        logger.info("temporal_client_initialized")
+
     logger.info("relos_ready")
     yield
 
     # ── Shutdown ─────────────────────────────
     await app.state.neo4j_driver.close()
+    if hasattr(app.state, "temporal_client"):
+        await app.state.temporal_client.close()
     logger.info("relos_shutdown")
 
 
@@ -99,10 +116,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── LangSmith 追踪中间件（Sprint 3 Week 11）────────────────────
+    app.add_middleware(LangSmithTracingMiddleware)
+
     # ── 注册路由 ──────────────────────────────────────────────────
     app.include_router(health.router, prefix="/v1", tags=["health"])
     app.include_router(relations.router, prefix="/v1/relations", tags=["relations"])
     app.include_router(decisions.router, prefix="/v1/decisions", tags=["decisions"])
+    app.include_router(expert_init.router, prefix="/v1/expert-init", tags=["expert-init"])
+    app.include_router(metrics.router, prefix="/v1/metrics", tags=["metrics"])
 
     return app
 

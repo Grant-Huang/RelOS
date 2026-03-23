@@ -12,7 +12,7 @@ relos/core/engine.py
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import structlog
 
@@ -101,7 +101,7 @@ class RelationEngine:
         Returns:
             衰减后的置信度（float, 0.0–1.0）
         """
-        as_of = as_of or datetime.utcnow()
+        as_of = as_of or datetime.now(timezone.utc)
         elapsed_days = (as_of - relation.updated_at).total_seconds() / 86400.0
 
         # 获取该关系类型的半衰期，默认 90 天
@@ -170,7 +170,7 @@ class RelationEngine:
             update={
                 "confidence": round(new_conf, 4),
                 "status": new_status,
-                "updated_at": datetime.utcnow(),
+                "updated_at": datetime.now(timezone.utc),
                 "extracted_by": f"human:{engineer_id}",
             }
         )
