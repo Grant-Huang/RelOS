@@ -14,6 +14,7 @@ Action 操作记录的 Neo4j 持久化。
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from typing import Any
 
 import structlog
@@ -92,7 +93,7 @@ def _log_to_dict(log: ActionLog) -> dict[str, Any]:
 
 
 def _node_to_action(node: Any) -> ActionRecord:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     logs_raw: list[dict[str, Any]] = json.loads(node.get("logs_json", "[]"))
     logs = [
@@ -119,6 +120,6 @@ def _node_to_action(node: Any) -> ActionRecord:
         shadow_mode=node["shadow_mode"],
         logs=logs,
         pre_flight_results=pre_flight,
-        created_at=datetime.fromisoformat(node["created_at"]).replace(tzinfo=timezone.utc),
-        updated_at=datetime.fromisoformat(node["updated_at"]).replace(tzinfo=timezone.utc),
+        created_at=datetime.fromisoformat(node["created_at"]).replace(tzinfo=UTC),
+        updated_at=datetime.fromisoformat(node["updated_at"]).replace(tzinfo=UTC),
     )

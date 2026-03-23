@@ -50,8 +50,8 @@ class ActionWorkflowResult:
 
 try:
     from temporalio import activity, workflow
-    from temporalio.client import Client
-    from temporalio.worker import Worker
+    from temporalio.client import Client  # noqa: F401
+    from temporalio.worker import Worker  # noqa: F401
     TEMPORAL_AVAILABLE = True
 except ImportError:
     TEMPORAL_AVAILABLE = False
@@ -205,7 +205,7 @@ class TemporalClient:
         TEMPORAL_TASK_QUEUE=relos-actions
     """
 
-    _instance: "TemporalClient | None" = None
+    _instance: TemporalClient | None = None
 
     def __init__(self, host: str = "localhost:7233", namespace: str = "default") -> None:
         self.host = host

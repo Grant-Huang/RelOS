@@ -10,8 +10,8 @@ FastAPI 应用入口。
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
@@ -80,7 +80,7 @@ async def _create_graph_constraints(driver: object) -> None:
         # 关系 ID 唯一性约束（通过节点属性实现）
         "CREATE CONSTRAINT device_id_unique IF NOT EXISTS FOR (n:Device) REQUIRE n.id IS UNIQUE",
         "CREATE CONSTRAINT alarm_id_unique IF NOT EXISTS FOR (n:Alarm) REQUIRE n.id IS UNIQUE",
-        "CREATE CONSTRAINT operator_id_unique IF NOT EXISTS FOR (n:Operator) REQUIRE n.id IS UNIQUE",
+        "CREATE CONSTRAINT operator_id_unique IF NOT EXISTS FOR (n:Operator) REQUIRE n.id IS UNIQUE",  # noqa: E501
         # 全文索引（用于语义搜索）
         "CREATE INDEX relation_confidence IF NOT EXISTS FOR ()-[r]-() ON (r.confidence)",
         "CREATE INDEX relation_status IF NOT EXISTS FOR ()-[r]-() ON (r.status)",

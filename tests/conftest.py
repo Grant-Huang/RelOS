@@ -15,13 +15,12 @@ tests/conftest.py
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from relos.core.models import RelationObject, RelationStatus, SourceType
-
 
 # ─── 通用工厂 Fixture ─────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ def sample_alarm_event() -> dict[str, str]:
         "alarm_code": "VIB-001",
         "alarm_description": "主轴振动超限 18.3mm/s",
         "severity": "medium",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 

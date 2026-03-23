@@ -4,7 +4,6 @@ tests/unit/test_context/test_compiler.py
 Context Engine 编译器单元测试。
 """
 
-import pytest
 
 from relos.context.compiler import ContextCompiler
 from relos.core.models import RelationObject, RelationStatus, SourceType

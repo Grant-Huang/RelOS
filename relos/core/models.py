@@ -13,18 +13,17 @@ RelOS 的核心数据模型。
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
+from pydantic import BaseModel, Field, model_validator
 
 # ─────────────────────────────────────────────
 # 枚举：来源类型
 # ─────────────────────────────────────────────
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     """
     关系的来源类型。
 
@@ -40,7 +39,7 @@ class SourceType(str, Enum):
     INFERENCE       = "inference"            # 系统从已有关系推断
 
 
-class RelationStatus(str, Enum):
+class RelationStatus(StrEnum):
     """
     关系的生命周期状态。
 
@@ -108,8 +107,8 @@ class RelationObject(BaseModel):
     )
 
     # ── 时间与衰减 ────────────────────────────
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     half_life_days: int = Field(
         default=90,
         description="置信度半衰期（天）。按关系类型配置：设备告警 90 天，操作员操作 30 天"
@@ -134,7 +133,7 @@ class RelationObject(BaseModel):
     )
 
     @model_validator(mode="after")
-    def apply_llm_constraints(self) -> "RelationObject":
+    def apply_llm_constraints(self) -> RelationObject:
         """
         LLM 抽取关系的双重约束（model_validator 确保所有字段已初始化后再校验）：
         1. 置信度硬上限 0.85（防止系统过度信任 AI 抽取的非结构化知识）
@@ -160,7 +159,7 @@ class Node(BaseModel):
     node_type: str = Field(description="节点类型，例如 Device, Alarm, Operator, Component")
     name: str = Field(description="节点人类可读名称")
     properties: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ─────────────────────────────────────────────

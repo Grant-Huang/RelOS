@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from relos.core.repository import RelationRepository
-from relos.ontology.templates import Industry, get_templates_for_industry, list_available_industries
+from relos.ontology.templates import get_templates_for_industry, list_available_industries
 
 router = APIRouter()
 
@@ -50,7 +50,7 @@ async def get_template(industry: str) -> dict[str, Any]:
     try:
         template = get_templates_for_industry(industry)  # type: ignore[arg-type]
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return {
         "industry": template.industry,
@@ -77,7 +77,7 @@ async def import_template(
     try:
         template = get_templates_for_industry(industry)  # type: ignore[arg-type]
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     imported = []
     skipped = []

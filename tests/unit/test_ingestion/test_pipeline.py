@@ -12,7 +12,6 @@ import pytest
 from relos.core.models import RelationObject, RelationStatus, SourceType
 from relos.ingestion.pipeline import AlarmRelationExtractor, IngestionPipeline
 
-
 # ─── 辅助工厂函数 ─────────────────────────────────────────────────────
 
 def make_relation(

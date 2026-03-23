@@ -11,10 +11,8 @@ from relos.action.engine import (
     ActionEngine,
     ActionRecord,
     ActionStatus,
-    PreFlightResult,
     run_pre_flight_checks,
 )
-
 
 # ─── 辅助 ──────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 
 import structlog
-from neo4j import AsyncDriver, AsyncSession
+from neo4j import AsyncDriver
 
 from relos.core.models import Node, RelationObject, RelationStatus
 

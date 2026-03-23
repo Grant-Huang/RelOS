@@ -5,13 +5,12 @@ RelationEngine 单元测试。
 无外部依赖（纯计算逻辑）。
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from relos.core.engine import RelationEngine
 from relos.core.models import RelationObject, RelationStatus, SourceType
-
 
 # ─── 测试数据工厂 ──────────────────────────────────────────────────
 
@@ -22,7 +21,7 @@ def make_relation(
     relation_type: str = "DEVICE__TRIGGERS__ALARM",
     days_old: int = 0,
 ) -> RelationObject:
-    now = datetime.now(timezone.utc) - timedelta(days=days_old)
+    now = datetime.now(UTC) - timedelta(days=days_old)
     return RelationObject(
         relation_type=relation_type,
         source_node_id="device-001",
@@ -113,7 +112,7 @@ class TestApplyDecay:
         assert decayed >= 0.05
 
     def test_operator_performs_operation_faster_decay(self) -> None:
-        """T-03：OPERATOR__PERFORMS__OPERATION 半衰期 30 天，衰减应快于 DEVICE__TRIGGERS__ALARM（90 天）"""
+        """T-03：OPERATOR__PERFORMS__OPERATION 半衰期 30 天，衰减应快于 DEVICE__TRIGGERS__ALARM（90 天）"""  # noqa: E501
         # 过了 30 天后，operator 关系应比 device 关系衰减更多
         device_rel = make_relation(
             confidence=0.8, days_old=30, relation_type="DEVICE__TRIGGERS__ALARM"
@@ -284,8 +283,8 @@ class TestBoundaryConditions:
 
     def test_decay_with_future_timestamp_no_negative(self) -> None:
         """updated_at 在未来（时钟漂移）时，不应产生负数 elapsed，置信度应基本不变"""
-        from datetime import datetime, timedelta, timezone
-        future_time = datetime.now(timezone.utc) + timedelta(days=5)
+        from datetime import datetime, timedelta
+        future_time = datetime.now(UTC) + timedelta(days=5)
         relation = RelationObject(
             relation_type="DEVICE__TRIGGERS__ALARM",
             source_node_id="d-001",
@@ -300,7 +299,7 @@ class TestBoundaryConditions:
         decayed = self.engine.apply_decay(relation)
 
         # 未来时间戳导致 elapsed_days < 0，decay 结果应不低于原始置信度
-        assert decayed >= relation.confidence or decayed == pytest.approx(relation.confidence, abs=0.01)
+        assert decayed >= relation.confidence or decayed == pytest.approx(relation.confidence, abs=0.01)  # noqa: E501
 
     # ── alpha 默认值 ───────────────────────────────────────────────
 

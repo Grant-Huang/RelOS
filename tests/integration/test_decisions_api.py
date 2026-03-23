@@ -316,7 +316,7 @@ class TestIT016ResponseTime:
         await _seed_high_confidence_device(api_client, device_id)
 
         resp = await api_client.post("/v1/decisions/analyze-alarm", json={
-            "alarm_id": f"IT-DEC-ALM-perf",
+            "alarm_id": "IT-DEC-ALM-perf",
             "device_id": device_id,
             "alarm_code": "VIB-001",
             "alarm_description": "振动超限",

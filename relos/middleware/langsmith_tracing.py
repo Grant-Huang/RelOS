@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable
 from typing import Any
 
 import structlog
@@ -113,7 +112,7 @@ class TraceContext:
         self.metadata = metadata or {}
         self._start_time: float = 0.0
 
-    def __enter__(self) -> "TraceContext":
+    def __enter__(self) -> TraceContext:
         self._start_time = time.monotonic()
         logger.info(
             "llm_trace_start",

@@ -313,7 +313,7 @@ class TestIT007PendingReview:
         src = f"IT-REL-d7-{uuid.uuid4().hex[:6]}"
         tgt = f"IT-REL-a7-{uuid.uuid4().hex[:6]}"
 
-        resp = await api_client.post("/v1/relations/", json=_rel_payload(src, tgt, 0.65, "llm_extracted"))
+        resp = await api_client.post("/v1/relations/", json=_rel_payload(src, tgt, 0.65, "llm_extracted"))  # noqa: E501
         assert resp.status_code == 201
         rel_id = resp.json()["id"]
 

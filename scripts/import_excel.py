@@ -10,8 +10,8 @@ Excel 批量导入命令行工具。
     python scripts/import_excel.py --file data/relations.xlsx --sheet "告警关系"
 
 Excel 格式要求（支持中英文列名）：
-    | source_node_id | source_node_type | target_node_id | target_node_type | relation_type | confidence | provenance |
-    | CNC-M1         | Device           | ALM-001        | Alarm            | DEVICE__TRIGGERS__ALARM | 0.85 | mes_structured |
+    | source_node_id | source_node_type | target_node_id | target_node_type | relation_type | confidence | provenance |  # noqa: E501
+    | CNC-M1         | Device           | ALM-001        | Alarm            | DEVICE__TRIGGERS__ALARM | 0.85 | mes_structured |  # noqa: E501
 
 详见 docs/data-model.md §Excel 导入规范。
 """
@@ -115,14 +115,14 @@ def main() -> None:
         sys.exit(1)
 
     # ── 打印解析结果 ─────────────────────────────────────────────────
-    print(f"\n📊 解析结果：")
+    print("\n📊 解析结果：")
     print(f"   总行数:   {result.total_rows}")
     print(f"   成功:     {result.success_count}")
     print(f"   失败:     {result.failed_count}")
     print(f"   准确率:   {result.accuracy * 100:.1f}%")
 
     if result.errors:
-        print(f"\n⚠️  解析错误（前 10 条）：")
+        print("\n⚠️  解析错误（前 10 条）：")
         for err in result.errors[:10]:
             print(f"   行 {err.row_number}: {err.error}")
 

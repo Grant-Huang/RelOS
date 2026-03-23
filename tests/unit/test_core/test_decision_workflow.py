@@ -11,7 +11,6 @@ tests/unit/test_core/test_decision_workflow.py
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -26,7 +25,6 @@ from relos.decision.workflow import (
     node_rule_engine,
     route_by_engine_path,
 )
-
 
 # ─── 测试数据 ──────────────────────────────────────────────────────
 
@@ -386,7 +384,7 @@ class TestNodeLLMAnalyzeErrorPaths:
         with patch("anthropic.AsyncAnthropic") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
-            mock_client.messages.create.side_effect = asyncio.TimeoutError()
+            mock_client.messages.create.side_effect = TimeoutError()
 
             result = await node_llm_analyze(state)
 
@@ -397,6 +395,7 @@ class TestNodeLLMAnalyzeErrorPaths:
     async def test_llm_json_parse_error_falls_back(self) -> None:
         """LLM 返回非法 JSON → 降级处理，不崩溃"""
         from unittest.mock import MagicMock
+
         from relos.context.compiler import ContextBlock
 
         state = make_state(

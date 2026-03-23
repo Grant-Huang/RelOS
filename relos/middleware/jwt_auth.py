@@ -59,7 +59,7 @@ def _decode_jwt(token: str, secret: str, algorithm: str) -> dict[str, Any]:
         import json
         parts = token.split(".")
         if len(parts) != 3:
-            raise ValueError("Invalid JWT format")
+            raise ValueError("Invalid JWT format") from None
         # base64url decode payload
         payload_b64 = parts[1] + "=="  # 补 padding
         payload_bytes = base64.urlsafe_b64decode(payload_b64)

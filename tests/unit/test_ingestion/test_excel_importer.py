@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import io
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,7 +20,6 @@ from relos.ingestion.excel_importer import (
     ImportResult,
     RowError,
 )
-
 
 # ─── 辅助：在内存中构建 Excel 字节流 ─────────────────────────────────
 
@@ -163,7 +161,7 @@ class TestEndToEndParsing:
             ["source_node_id", "source_node_type", "target_node_id", "target_node_type",
              "relation_type", "confidence"],
             ["CNC-M1", "Device", "ALM-001", "Alarm", "DEVICE__TRIGGERS__ALARM", 0.85],  # 有效
-            ["CNC-M1", "Device", "ALM-002", "Alarm", "DEVICE__TRIGGERS__ALARM", 2.0],   # 置信度超范围
+            ["CNC-M1", "Device", "ALM-002", "Alarm", "DEVICE__TRIGGERS__ALARM", 2.0],   # 置信度超范围  # noqa: E501
         ]
         content = make_excel_bytes(rows)
         importer = ExcelImporter()
@@ -180,7 +178,7 @@ class TestEndToEndParsing:
         pytest.importorskip("openpyxl")
 
         rows: list[list[Any]] = [
-            ["source_node_id", "source_node_type", "target_node_id", "target_node_type", "relation_type"],
+            ["source_node_id", "source_node_type", "target_node_id", "target_node_type", "relation_type"],  # noqa: E501
             ["CNC-M1", "Device", "ALM-001", "Alarm", "DEVICE__TRIGGERS__ALARM"],
             [None, None, None, None, None],  # 空行
         ]
