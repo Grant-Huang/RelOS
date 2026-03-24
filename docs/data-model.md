@@ -68,6 +68,10 @@ class RelationObject(BaseModel):
 | `mes_structured` | 0.75–0.90 | 0.40 | 90 天 |
 | `llm_extracted` | 0.50–**0.85**（硬上限）| 0.20 | 90 天 |
 | `inference` | 0.40–0.75 | 0.15 | 60 天 |
+| `structured_document` | 0.65–0.85 | 0.35 | 90 天 |
+| `expert_document` | 0.50–0.85 | 0.25 | 90 天 |
+
+> **Sprint 3 新增**：`structured_document`（FMEA/CMMS 工单规则解析）和 `expert_document`（8D 报告/交接班日志，LLM 抽取 + 人工标注）来源类型由文档摄取 Pipeline 自动设置，无需手动指定。
 
 ### 1.3 关系状态流转
 

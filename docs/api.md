@@ -7,7 +7,7 @@
 
 ---
 
-**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景）
+**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景）、`/v1/documents`（文档摄取 + AI 标注）
 
 ## 目录
 
@@ -17,8 +17,9 @@
 4. [专家初始化（Sprint 3）](#4-专家初始化-sprint-3)
 5. [图谱统计（Sprint 3）](#5-图谱统计-sprint-3)
 6. [演示场景（Sprint 3 扩展）](#6-演示场景-sprint-3-扩展)
-7. [错误码](#7-错误码)
-8. [通用 Schema](#8-通用-schema)
+7. [文档摄取与 AI 标注（Sprint 3 扩展）](#7-文档摄取与-ai-标注-sprint-3-扩展)
+8. [错误码](#8-错误码)
+9. [通用 Schema](#9-通用-schema)
 
 ---
 
@@ -372,54 +373,6 @@
 
 ---
 
-## 6. 错误码
-
-| HTTP 状态码 | 错误场景 | 响应示例 |
-|------------|---------|---------|
-| `400 Bad Request` | 请求体格式错误 | `{"detail": "confidence must be between 0.0 and 1.0"}` |
-| `404 Not Found` | 资源不存在 | `{"detail": "Relation rel-xxx not found"}` |
-| `422 Unprocessable Entity` | Pydantic 校验失败 | `{"detail": [{"loc": [...], "msg": "..."}]}` |
-| `500 Internal Server Error` | 服务器内部错误 | `{"detail": "Internal server error"}` |
-| `503 Service Unavailable` | Neo4j/Redis 不可用 | `{"status": "degraded", "neo4j": "error"}` |
-
----
-
-## 7. 通用 Schema
-
-### SourceType 枚举
-
-| 值 | 说明 |
-|----|------|
-| `manual_engineer` | 工程师手动录入 |
-| `sensor_realtime` | 传感器实时数据 |
-| `mes_structured` | MES/ERP 结构化导入 |
-| `llm_extracted` | LLM 从文本中抽取 |
-| `inference` | 系统推断 |
-
-### RelationStatus 枚举
-
-| 值 | 说明 |
-|----|------|
-| `pending_review` | 待审核（LLM 抽取的关系默认）|
-| `active` | 已激活，参与推理 |
-| `conflicted` | 存在冲突，暂停推理 |
-| `archived` | 已归档，保留历史 |
-
-### ActionStatus 枚举
-
-| 值 | 说明 |
-|----|------|
-| `pending` | 待处理 |
-| `pre_flight_check` | 验证中 |
-| `approved` | 验证通过 |
-| `rejected` | 已拒绝 |
-| `executing` | 执行中 |
-| `completed` | 已完成 |
-| `failed` | 已失败 |
-| `rolled_back` | 已回滚 |
-
----
-
 ## 6. 演示场景（Sprint 3 扩展）
 
 > 面向中层（运营）和高层（战略）用户的聚合分析端点。
@@ -623,3 +576,261 @@
 ```
 
 **注**：模拟基于图中 `CAPACITY__AFFECTS__FAILURE_RATE` 和 `LOAD__INCREASES__RISK` 关系的历史弹性系数，置信度随历史数据积累而提升。
+
+---
+
+## 7. 文档摄取与 AI 标注（Sprint 3 扩展）
+
+> **工作流**：上传文档 → AI 分析（Claude）→ 人工标注（approve/reject/modify）→ 提交图谱
+>
+> 演示前运行：`python scripts/generate_sample_docs.py` 生成样本文档
+>
+> 无 `ANTHROPIC_API_KEY` 时自动切换 Mock 模式，返回预定义演示候选关系。
+
+### 支持的文档类型
+
+| 模板类型 | 格式 | 说明 |
+|---------|------|------|
+| `cmms_maintenance` | xlsx | 设备维修工单（CMMS 系统导出）|
+| `fmea` | xlsx | FMEA 失效模式分析表 |
+| `supplier_delivery` | xlsx | 供应商交期记录 |
+| `quality_8d` | docx | 8D 质量异常报告 |
+| `shift_handover` | docx | 交接班日志 |
+| `unknown` | xlsx/docx | 未识别模板，全量 LLM 处理 |
+
+---
+
+### POST /documents/upload
+
+上传文档并启动 AI 关系抽取（异步后台执行）。
+
+**请求**：`multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | File | ✅ | xlsx 或 docx 文件，最大 10MB |
+| `template_hint` | string | ❌ | 模板类型提示（若已知，跳过自动检测）|
+
+**响应**：`202 Accepted`
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "filename": "cmms_maintenance_orders.xlsx",
+  "template_type": "cmms_maintenance",
+  "status": "uploaded",
+  "pending_count": 0,
+  "approved_count": 0,
+  "committed_count": 0,
+  "created_at": "2026-03-24T10:00:00"
+}
+```
+
+客户端通过 `GET /documents/{doc_id}` 轮询，直到 `status = "pending_review"`。
+
+---
+
+### GET /documents/
+
+列出所有文档记录，按上传时间倒序。
+
+**响应**：`DocumentSummary[]`
+
+---
+
+### GET /documents/{doc_id}
+
+查询文档详情，包含所有 AI 候选关系。
+
+**响应**（`status = "pending_review"` 时）：
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "filename": "cmms_maintenance_orders.xlsx",
+  "template_type": "cmms_maintenance",
+  "status": "pending_review",
+  "extracted_relations": [
+    {
+      "id": "3f7a9c1b",
+      "source_node_id": "machine-M3",
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_id": "fm-bearing-wear",
+      "target_node_name": "轴承磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.82,
+      "evidence": "2026-01-15 工单：焊接机M3轴承温度异常，更换轴承后恢复正常",
+      "reasoning": "维修记录明确描述了设备与故障类型的对应关系",
+      "annotation_status": "pending",
+      "modified_confidence": null,
+      "annotated_at": null
+    }
+  ],
+  "committed_count": 0,
+  "created_at": "2026-03-24T10:00:00"
+}
+```
+
+**`status` 状态说明**：
+
+| 值 | 说明 |
+|----|------|
+| `uploaded` | 刚上传，等待处理 |
+| `parsing` | 正在读取文件结构 |
+| `extracting` | AI 正在分析文档 |
+| `pending_review` | 候选关系已生成，等待人工标注 |
+| `committed` | 已全部提交到图谱 |
+| `failed` | 处理出错（见 `error_message`）|
+
+---
+
+### POST /documents/{doc_id}/annotate/{rel_id}
+
+标注单条候选关系。
+
+**请求体**：
+
+```json
+{
+  "action": "approve",
+  "modified_confidence": null,
+  "modified_relation_type": null,
+  "annotated_by": "engineer"
+}
+```
+
+| `action` | 说明 |
+|----------|------|
+| `approve` | 确认关系，以原置信度提交 |
+| `reject` | 拒绝关系，不写入图谱 |
+| `modify` | 修改置信度/关系类型后确认（需提供 `modified_confidence` 或 `modified_relation_type`）|
+
+**响应**：返回更新后的完整 `DocumentRecord`。
+
+**批量标注示例（shell 脚本）**：
+
+```bash
+DOC_ID="a1b2c3d4e5f6"
+# 查出所有 pending 关系 ID
+REL_IDS=$(curl -s http://localhost:8000/v1/documents/$DOC_ID \
+  | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin)['extracted_relations']]")
+
+# 全部批准
+for REL_ID in $REL_IDS; do
+  curl -s -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/$REL_ID \
+    -H "Content-Type: application/json" \
+    -d '{"action":"approve"}'
+done
+```
+
+---
+
+### POST /documents/{doc_id}/commit
+
+将所有 `approved` / `modified` 的候选关系提交到 Neo4j 图谱。
+
+- 跳过 `pending` 和 `rejected` 关系
+- 提交后文档状态变为 `committed`，不可重复提交
+- 关系 `provenance` 自动设置：
+  - 结构化模板（CMMS/FMEA/SUPPLIER）→ `structured_document`（初始置信度 0.65–0.85）
+  - 非结构化模板（8D/SHIFT/UNKNOWN）→ `expert_document`（初始置信度 0.50–0.85）
+- 所有提交关系状态为 `pending_review`（图谱层的第二道审核）
+
+**响应**：
+
+```json
+{
+  "doc_id": "a1b2c3d4e5f6",
+  "committed_count": 3,
+  "skipped_count": 1,
+  "relation_ids": ["3f7a9c1b", "8e2b4d6f", "1a9c3e5b"]
+}
+```
+
+---
+
+### 完整 Demo 流程（curl 命令）
+
+```bash
+# 1. 生成样本文档
+python scripts/generate_sample_docs.py
+
+# 2. 上传维修工单
+DOC_ID=$(curl -s -X POST http://localhost:8000/v1/documents/upload \
+  -F "file=@sample_docs/cmms_maintenance_orders.xlsx" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "Document ID: $DOC_ID"
+
+# 3. 轮询等待 AI 分析完成（状态变为 pending_review）
+until [ "$(curl -s http://localhost:8000/v1/documents/$DOC_ID | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")" = "pending_review" ]; do
+  echo "Waiting..."; sleep 1
+done
+
+# 4. 查看候选关系
+curl -s http://localhost:8000/v1/documents/$DOC_ID | python3 -m json.tool
+
+# 5. 批准第一条关系（替换 REL_ID）
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/REL_ID \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approve"}'
+
+# 6. 修改置信度后批准
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/REL_ID \
+  -H "Content-Type: application/json" \
+  -d '{"action": "modify", "modified_confidence": 0.90}'
+
+# 7. 提交到图谱
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
+```
+
+---
+
+## 8. 错误码
+
+| HTTP 状态码 | 错误场景 | 响应示例 |
+|------------|---------|---------|
+| `400 Bad Request` | 请求体格式错误 | `{"detail": "confidence must be between 0.0 and 1.0"}` |
+| `404 Not Found` | 资源不存在 | `{"detail": "Relation rel-xxx not found"}` |
+| `422 Unprocessable Entity` | Pydantic 校验失败 | `{"detail": [{"loc": [...], "msg": "..."}]}` |
+| `500 Internal Server Error` | 服务器内部错误 | `{"detail": "Internal server error"}` |
+| `503 Service Unavailable` | Neo4j/Redis 不可用 | `{"status": "degraded", "neo4j": "error"}` |
+
+---
+
+## 9. 通用 Schema
+
+### SourceType 枚举
+
+| 值 | 说明 |
+|----|------|
+| `manual_engineer` | 工程师手动录入 |
+| `sensor_realtime` | 传感器实时数据 |
+| `mes_structured` | MES/ERP 结构化导入 |
+| `llm_extracted` | LLM 从文本中抽取 |
+| `inference` | 系统推断 |
+| `structured_document` | 结构化文档解析（FMEA/CMMS 工单，Sprint 3）|
+| `expert_document` | 专家文档 LLM 抽取 + 人工标注（8D 报告/交接班日志，Sprint 3）|
+
+### RelationStatus 枚举
+
+| 值 | 说明 |
+|----|------|
+| `pending_review` | 待审核（LLM 抽取的关系默认）|
+| `active` | 已激活，参与推理 |
+| `conflicted` | 存在冲突，暂停推理 |
+| `archived` | 已归档，保留历史 |
+
+### ActionStatus 枚举
+
+| 值 | 说明 |
+|----|------|
+| `pending` | 待处理 |
+| `pre_flight_check` | 验证中 |
+| `approved` | 验证通过 |
+| `rejected` | 已拒绝 |
+| `executing` | 执行中 |
+| `completed` | 已完成 |
+| `failed` | 已失败 |
+| `rolled_back` | 已回滚 |

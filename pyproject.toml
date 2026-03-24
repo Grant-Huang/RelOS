@@ -32,8 +32,9 @@ dependencies = [
     "httpx>=0.28.0",
     "python-multipart>=0.0.9",
 
-    # Sprint 3: Excel 批量导入
+    # Sprint 3: Excel 批量导入 + 文档解析
     "openpyxl>=3.1.0",
+    "python-docx>=1.1.0",
 
     # Sprint 3: Temporal.io 工作流（生产执行路径）
     "temporalio>=1.7.0",

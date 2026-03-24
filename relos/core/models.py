@@ -32,11 +32,13 @@ class SourceType(StrEnum):
     - 合并时的 alpha 权重（加权滑动平均）
     - 衰减半衰期 half_life_days
     """
-    MANUAL_ENGINEER = "manual_engineer"      # 工程师手动输入，最高可信度
-    SENSOR_REALTIME = "sensor_realtime"      # 传感器实时数据，高可信度
-    MES_STRUCTURED  = "mes_structured"       # MES/ERP 结构化导入
-    LLM_EXTRACTED   = "llm_extracted"        # LLM 从文本中抽取，置信度上限 0.85
-    INFERENCE       = "inference"            # 系统从已有关系推断
+    MANUAL_ENGINEER     = "manual_engineer"      # 工程师手动输入，最高可信度
+    SENSOR_REALTIME     = "sensor_realtime"      # 传感器实时数据，高可信度
+    MES_STRUCTURED      = "mes_structured"       # MES/ERP 结构化导入
+    LLM_EXTRACTED       = "llm_extracted"        # LLM 从文本中抽取，置信度上限 0.85
+    INFERENCE           = "inference"            # 系统从已有关系推断
+    STRUCTURED_DOCUMENT = "structured_document"  # 结构化文档（FMEA/CMMS工单），规则解析
+    EXPERT_DOCUMENT     = "expert_document"      # 专家文档（8D报告/案例库），LLM抽取+人工标注
 
 
 class RelationStatus(StrEnum):
@@ -228,9 +230,11 @@ HALF_LIFE_CONFIG: dict[str, int] = {
 # 按来源类型配置合并 alpha（加权滑动平均权重）
 # alpha 越高，新观测的影响越大
 ALPHA_CONFIG: dict[SourceType, float] = {
-    SourceType.MANUAL_ENGINEER: 0.3,   # 工程师确认：稳定，新观测权重低
-    SourceType.SENSOR_REALTIME: 0.5,   # 传感器：实时性强，新观测权重高
-    SourceType.MES_STRUCTURED:  0.4,
-    SourceType.LLM_EXTRACTED:   0.2,   # LLM：不确定性高，保守更新
-    SourceType.INFERENCE:       0.15,
+    SourceType.MANUAL_ENGINEER:     0.3,   # 工程师确认：稳定，新观测权重低
+    SourceType.SENSOR_REALTIME:     0.5,   # 传感器：实时性强，新观测权重高
+    SourceType.MES_STRUCTURED:      0.4,
+    SourceType.LLM_EXTRACTED:       0.2,   # LLM：不确定性高，保守更新
+    SourceType.INFERENCE:           0.15,
+    SourceType.STRUCTURED_DOCUMENT: 0.35,  # 结构化文档：可信度介于 MES 和工程师之间
+    SourceType.EXPERT_DOCUMENT:     0.25,  # 专家文档：LLM+人工，保守更新
 }
