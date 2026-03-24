@@ -451,6 +451,17 @@ action.logs.append(log_entry)  # 只追加
 新增：
   ├── Excel Import Pipeline（批量关系导入）
   ├── /v1/expert-init 端点（专家初始化 API）
+  ├── /v1/metrics 端点（关系图谱健康度统计）
+  ├── /v1/ontology 端点（行业本体模板管理）
+  ├── /v1/scenarios 端点（场景 S7–S12，中高层聚合分析）
+  ├── /v1/documents 端点（文档摄取 + AI 标注工作流）
+  ├── relos/ingestion/document/（文档解析与 AI 关系抽取模块）
+  │     ├── excel_parser.py（CMMS/FMEA/供应商 xlsx 解析）
+  │     ├── word_parser.py（8D 报告/交接班日志 docx 解析）
+  │     ├── llm_extractor.py（Claude API 关系抽取，含 Mock 模式）
+  │     ├── entity_resolver.py（实体别名解析）
+  │     └── store.py（文档记录内存存储，MVP）
+  ├── SourceType 扩展：structured_document、expert_document
   ├── Temporal.io 客户端（Action Engine 生产执行）
   └── LangSmith 追踪中间件
 ```

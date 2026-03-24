@@ -18,7 +18,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j import AsyncGraphDatabase
 
-from relos.api.v1 import decisions, expert_init, health, metrics, ontology, relations
+from relos.api.v1 import decisions, documents, expert_init, health, metrics, ontology, relations, scenarios
+from relos.ingestion.document.store import DocumentStore
 from relos.config import settings
 from relos.middleware.jwt_auth import JWTAuthMiddleware
 from relos.middleware.langsmith_tracing import LangSmithTracingMiddleware, setup_langsmith_tracing
@@ -46,6 +47,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # 创建图约束（幂等操作，重启安全）
     await _create_graph_constraints(app.state.neo4j_driver)
+
+    # 初始化文档摄取存储（内存，MVP）
+    app.state.document_store = DocumentStore()
+    logger.info("document_store_initialized")
 
     # 初始化 LangSmith 追踪（Sprint 3 Week 11）
     langsmith_enabled = setup_langsmith_tracing(
@@ -134,6 +139,8 @@ def create_app() -> FastAPI:
     app.include_router(expert_init.router, prefix="/v1/expert-init", tags=["expert-init"])
     app.include_router(metrics.router, prefix="/v1/metrics", tags=["metrics"])
     app.include_router(ontology.router, prefix="/v1/ontology", tags=["ontology"])
+    app.include_router(scenarios.router, prefix="/v1/scenarios", tags=["scenarios"])
+    app.include_router(documents.router, prefix="/v1/documents", tags=["documents"])
 
     return app
 

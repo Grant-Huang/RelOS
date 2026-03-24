@@ -1,8 +1,8 @@
 # RelOS 产品需求文档（PRD）
 
-**版本**：v1.0  
-**日期**：2026 年 3 月  
-**状态**：Sprint 1–2 已交付，Sprint 3–4 规划中  
+**版本**：v1.1（Sprint 3 Week 12 扩展版）
+**日期**：2026 年 3 月
+**状态**：Sprint 1–3 已交付，Sprint 4 规划中
 **作者**：Nexus AI Platform 产品团队
 
 ---
@@ -61,6 +61,22 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 | **质量工程师** | 负责质量异常溯源 | 质量关系链分析 | 中 |
 | **工厂 IT 管理员** | 负责系统集成与维护 | API 集成、数据导入、系统监控 | 高 |
 
+### 2.1b 中层用户（Sprint 3 扩展）
+
+| 角色 | 描述 | 主要使用场景 |
+|------|------|------------|
+| **生产经理** | 负责产线效率与排产 | 产线效率瓶颈识别（场景7）|
+| **运营总监** | 负责跨部门资源协调 | 跨部门协同问题分析（场景8）|
+| **设备经理** | 负责设备保障计划 | 异常处理效率分析（场景9）|
+
+### 2.1c 高层用户（Sprint 3 扩展）
+
+| 角色 | 描述 | 主要使用场景 |
+|------|------|------------|
+| **CEO / 总裁** | 负责企业整体战略 | 风险雷达（场景10）、战略模拟（场景12）|
+| **COO / 运营副总** | 负责生产运营效率 | 资源配置优化（场景11）|
+| **董事会 / 投资人** | 决策层 | 企业风险雷达（场景10）演示 |
+
 ### 2.2 次要用户（间接受益）
 
 - **工厂管理层**：通过仪表板获取系统价值洞察（OEE 改善、维修时间缩短）
@@ -87,7 +103,7 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - 让工程师相信系统有用（推荐确认率 > 60%）
 
 **中期目标（第 1–6 月）**：
-- 覆盖 6 大核心场景，关系图谱质量持续提升（"越用越准"可量化）
+- 覆盖 12 大场景（基础 6 + 中层 3 + 高层 3），关系图谱质量持续提升（"越用越准"可量化）
 - 3 家客户正式付费，ARR 达到 150 万元
 
 **长期目标（第 6–18 月）**：
@@ -203,6 +219,12 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - `POST /v1/decisions/analyze-alarm`：告警根因分析
 - `POST /v1/decisions/execute-action`：触发操作执行
 - `GET /v1/decisions/action/{id}`：查询操作状态
+- `GET /v1/scenarios/line-efficiency`：场景7 产线效率分析
+- `GET /v1/scenarios/cross-dept-analysis`：场景8 跨部门协同分析
+- `GET /v1/scenarios/issue-resolution`：场景9 异常处理效率分析
+- `GET /v1/scenarios/risk-radar`：场景10 企业级风险雷达
+- `GET /v1/scenarios/resource-optimization`：场景11 资源配置优化
+- `POST /v1/scenarios/strategic-simulation`：场景12 战略决策模拟
 
 ---
 

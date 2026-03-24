@@ -32,7 +32,9 @@ class IngestionPipeline:
         SourceType.SENSOR_REALTIME: (0.80, 0.95),
         SourceType.MES_STRUCTURED:  (0.75, 0.90),
         SourceType.LLM_EXTRACTED:   (0.50, 0.85),   # 硬上限 0.85
-        SourceType.INFERENCE:       (0.40, 0.75),
+        SourceType.INFERENCE:           (0.40, 0.75),
+        SourceType.STRUCTURED_DOCUMENT: (0.65, 0.85),
+        SourceType.EXPERT_DOCUMENT:     (0.50, 0.85),
     }
 
     def validate_and_normalize(self, relation: RelationObject) -> RelationObject:

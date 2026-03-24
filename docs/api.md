@@ -7,7 +7,7 @@
 
 ---
 
-**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）
+**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景）、`/v1/documents`（文档摄取 + AI 标注）
 
 ## 目录
 
@@ -16,8 +16,10 @@
 3. [决策分析](#3-决策分析)
 4. [专家初始化（Sprint 3）](#4-专家初始化-sprint-3)
 5. [图谱统计（Sprint 3）](#5-图谱统计-sprint-3)
-6. [错误码](#6-错误码)
-7. [通用 Schema](#7-通用-schema)
+6. [演示场景（Sprint 3 扩展）](#6-演示场景-sprint-3-扩展)
+7. [文档摄取与 AI 标注（Sprint 3 扩展）](#7-文档摄取与-ai-标注-sprint-3-扩展)
+8. [错误码](#8-错误码)
+9. [通用 Schema](#9-通用-schema)
 
 ---
 
@@ -371,7 +373,421 @@
 
 ---
 
-## 6. 错误码
+## 6. 演示场景（Sprint 3 扩展）
+
+> 面向中层（运营）和高层（战略）用户的聚合分析端点。
+> 所有数据均来自 Neo4j 中的 RelationObject，无独立数据库。
+> 演示前需执行：`python scripts/seed_demo_scenarios.py`
+
+### GET /scenarios/line-efficiency
+
+**场景7**：产线效率瓶颈识别。分析各产线效率，定位瓶颈产线及其根因设备。
+
+**响应示例**：
+
+```json
+{
+  "lines": [
+    {"line_id": "line-L2", "name": "产线 L2（焊接线）", "efficiency_pct": 64, "status": "bottleneck"},
+    {"line_id": "line-L3", "name": "产线 L3（装配线）", "efficiency_pct": 81, "status": "normal"},
+    {"line_id": "line-L1", "name": "产线 L1（冲压线）", "efficiency_pct": 92, "status": "normal"}
+  ],
+  "bottleneck_line_id": "line-L2",
+  "bottleneck_reason": "设备 M3 过热告警频繁，停机时间 18.5 小时/7天",
+  "bottleneck_machine_id": "machine-M3",
+  "bottleneck_contribution_pct": 42.0,
+  "root_cause_path": [
+    "设备 machine-M3 停机频繁",
+    "告警：焊接过热告警（7天内 9 次，环比 +80%）",
+    "产线 line-L2 效率损失 28%",
+    "占总延误贡献 42%"
+  ],
+  "confidence": 0.88
+}
+```
+
+---
+
+### GET /scenarios/cross-dept-analysis
+
+**场景8**：跨部门协同问题定位。分析供应链延误的因果路径，计算各部门责任占比。
+
+**响应示例**：
+
+```json
+{
+  "delayed_workorders": [
+    {"workorder_id": "workorder-WO-001", "name": "工单 WO-001", "delay_days": 3, "blocked_by": "优质钢板 Q235"},
+    {"workorder_id": "workorder-WO-002", "name": "工单 WO-002", "delay_days": 3, "blocked_by": "优质钢板 Q235"}
+  ],
+  "delay_attribution": {
+    "采购部门（供应商管理）": 47.8,
+    "生产部门（排产调整）": 21.7,
+    "计划部门（安全库存设置）": 30.5
+  },
+  "causal_chain": [
+    "供应商 A 准时率仅 43%",
+    "Q235 钢板库存降至安全库存 22%",
+    "2 个工单因缺料被迫推迟",
+    "平均每工单延误 3 天"
+  ],
+  "total_delay_days": 6,
+  "confidence": 0.88
+}
+```
+
+---
+
+### GET /scenarios/issue-resolution
+
+**场景9**：异常处理效率分析。对比不同故障类型和班次的处理时间差异。
+
+**响应示例**：
+
+```json
+{
+  "issue_type_summary": [
+    {"display_name": "轴承磨损", "avg_resolution_hours": 2.7, "sample_count": 3, "status": "slow"},
+    {"display_name": "电气故障", "avg_resolution_hours": 1.1, "sample_count": 1, "status": "normal"},
+    {"display_name": "冷却系统", "avg_resolution_hours": 0.7, "sample_count": 1, "status": "normal"}
+  ],
+  "shift_comparison": {
+    "night_avg_hours": 3.0,
+    "day_avg_hours": 1.3,
+    "night_vs_day_ratio": 2.31
+  },
+  "slowest_issue_type": "轴承磨损",
+  "night_vs_day_ratio": 2.31,
+  "insight": "夜班处理时间比白班平均长 131%，轴承类问题最为突出（平均 2.7 小时）",
+  "confidence": 0.85
+}
+```
+
+---
+
+### GET /scenarios/risk-radar
+
+**场景10**：企业级风险雷达。聚合全企业风险信号，输出实时风险评分和因果链。
+
+**响应示例**：
+
+```json
+{
+  "risk_domains": [
+    {"name": "供应链中断风险", "domain": "supply_chain", "score": 0.68, "score_pct": 68, "trend": "rising", "level": "high"},
+    {"name": "质量波动风险",   "domain": "quality",       "score": 0.52, "score_pct": 52, "trend": "stable", "level": "medium"},
+    {"name": "设备稳定性风险", "domain": "equipment",     "score": 0.41, "score_pct": 41, "trend": "rising", "level": "medium"}
+  ],
+  "top_risk": {"name": "供应链中断风险", "score_pct": 68, "top_driver": "supplier-A"},
+  "top_risk_causal_chain": [
+    "供应商 A（华盛钢材）交期不稳定，准时率 43%",
+    "Q235 钢板库存仅剩 22%",
+    "2 个在制工单面临延误，交付承诺风险 ↑"
+  ],
+  "overall_risk_level": "high",
+  "trend": "deteriorating",
+  "confidence": 0.82
+}
+```
+
+---
+
+### GET /scenarios/resource-optimization
+
+**场景11**：资源配置优化。基于问题-资源关系给出 ROI 排序的投入建议。
+
+**响应示例**：
+
+```json
+{
+  "recommendations": [
+    {
+      "rank": 1,
+      "resource_name": "设备维护团队",
+      "roi_pct": 35,
+      "investment_rmb": 360000,
+      "impact_description": "可减少交付延误 41%"
+    },
+    {
+      "rank": 2,
+      "resource_name": "供应商管理专员",
+      "roi_pct": 28,
+      "investment_rmb": 180000,
+      "impact_description": "可减少交付延误 31%"
+    },
+    {
+      "rank": 3,
+      "resource_name": "夜班技能培训",
+      "roi_pct": 22,
+      "investment_rmb": 50000,
+      "impact_description": "可缩短故障处理时间 28%"
+    }
+  ],
+  "total_investment_rmb": 590000,
+  "expected_efficiency_gain_pct": 18.9,
+  "priority_action": "优先投入：设备维护团队（ROI 最高，预计 8 个月回本）",
+  "confidence": 0.80
+}
+```
+
+---
+
+### POST /scenarios/strategic-simulation
+
+**场景12**：战略决策模拟。输入扩产比例，推算对交付风险、故障率、质量的影响。
+
+**请求体**：
+
+```json
+{
+  "expansion_pct": 30,
+  "simulation_horizon_days": 90
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `expansion_pct` | float | 30.0 | 产能扩张比例（%），如 30 表示扩产 30% |
+| `simulation_horizon_days` | int | 90 | 模拟时间窗口（天）|
+
+**响应示例**（`expansion_pct=30`）：
+
+```json
+{
+  "expansion_pct": 30,
+  "delivery_risk_change_pct": 27.0,
+  "failure_rate_change_pct": 18.0,
+  "quality_risk_change_pct": 12.0,
+  "risk_level": "high",
+  "causal_chain": [
+    "订单量 +30%",
+    "产线负载：70% → 91%（+21%）",
+    "设备故障率预计上升 18%（弹性系数 1.8）",
+    "质量缺陷率预计上升 12%",
+    "交付风险综合上升 27%"
+  ],
+  "recommendations": [
+    "建议扩产前完成 M3 维修保养（消除当前 18.5h/周停机隐患）",
+    "将供应商 A 准时率提升至 80% 以上，否则扩产后缺料风险 ×2",
+    "夜班增配有经验维修工（当前夜班经验均值仅 4.2 年）"
+  ],
+  "confidence": 0.78
+}
+```
+
+**注**：模拟基于图中 `CAPACITY__AFFECTS__FAILURE_RATE` 和 `LOAD__INCREASES__RISK` 关系的历史弹性系数，置信度随历史数据积累而提升。
+
+---
+
+## 7. 文档摄取与 AI 标注（Sprint 3 扩展）
+
+> **工作流**：上传文档 → AI 分析（Claude）→ 人工标注（approve/reject/modify）→ 提交图谱
+>
+> 演示前运行：`python scripts/generate_sample_docs.py` 生成样本文档
+>
+> 无 `ANTHROPIC_API_KEY` 时自动切换 Mock 模式，返回预定义演示候选关系。
+
+### 支持的文档类型
+
+| 模板类型 | 格式 | 说明 |
+|---------|------|------|
+| `cmms_maintenance` | xlsx | 设备维修工单（CMMS 系统导出）|
+| `fmea` | xlsx | FMEA 失效模式分析表 |
+| `supplier_delivery` | xlsx | 供应商交期记录 |
+| `quality_8d` | docx | 8D 质量异常报告 |
+| `shift_handover` | docx | 交接班日志 |
+| `unknown` | xlsx/docx | 未识别模板，全量 LLM 处理 |
+
+---
+
+### POST /documents/upload
+
+上传文档并启动 AI 关系抽取（异步后台执行）。
+
+**请求**：`multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | File | ✅ | xlsx 或 docx 文件，最大 10MB |
+| `template_hint` | string | ❌ | 模板类型提示（若已知，跳过自动检测）|
+
+**响应**：`202 Accepted`
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "filename": "cmms_maintenance_orders.xlsx",
+  "template_type": "cmms_maintenance",
+  "status": "uploaded",
+  "pending_count": 0,
+  "approved_count": 0,
+  "committed_count": 0,
+  "created_at": "2026-03-24T10:00:00"
+}
+```
+
+客户端通过 `GET /documents/{doc_id}` 轮询，直到 `status = "pending_review"`。
+
+---
+
+### GET /documents/
+
+列出所有文档记录，按上传时间倒序。
+
+**响应**：`DocumentSummary[]`
+
+---
+
+### GET /documents/{doc_id}
+
+查询文档详情，包含所有 AI 候选关系。
+
+**响应**（`status = "pending_review"` 时）：
+
+```json
+{
+  "id": "a1b2c3d4e5f6",
+  "filename": "cmms_maintenance_orders.xlsx",
+  "template_type": "cmms_maintenance",
+  "status": "pending_review",
+  "extracted_relations": [
+    {
+      "id": "3f7a9c1b",
+      "source_node_id": "machine-M3",
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_id": "fm-bearing-wear",
+      "target_node_name": "轴承磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.82,
+      "evidence": "2026-01-15 工单：焊接机M3轴承温度异常，更换轴承后恢复正常",
+      "reasoning": "维修记录明确描述了设备与故障类型的对应关系",
+      "annotation_status": "pending",
+      "modified_confidence": null,
+      "annotated_at": null
+    }
+  ],
+  "committed_count": 0,
+  "created_at": "2026-03-24T10:00:00"
+}
+```
+
+**`status` 状态说明**：
+
+| 值 | 说明 |
+|----|------|
+| `uploaded` | 刚上传，等待处理 |
+| `parsing` | 正在读取文件结构 |
+| `extracting` | AI 正在分析文档 |
+| `pending_review` | 候选关系已生成，等待人工标注 |
+| `committed` | 已全部提交到图谱 |
+| `failed` | 处理出错（见 `error_message`）|
+
+---
+
+### POST /documents/{doc_id}/annotate/{rel_id}
+
+标注单条候选关系。
+
+**请求体**：
+
+```json
+{
+  "action": "approve",
+  "modified_confidence": null,
+  "modified_relation_type": null,
+  "annotated_by": "engineer"
+}
+```
+
+| `action` | 说明 |
+|----------|------|
+| `approve` | 确认关系，以原置信度提交 |
+| `reject` | 拒绝关系，不写入图谱 |
+| `modify` | 修改置信度/关系类型后确认（需提供 `modified_confidence` 或 `modified_relation_type`）|
+
+**响应**：返回更新后的完整 `DocumentRecord`。
+
+**批量标注示例（shell 脚本）**：
+
+```bash
+DOC_ID="a1b2c3d4e5f6"
+# 查出所有 pending 关系 ID
+REL_IDS=$(curl -s http://localhost:8000/v1/documents/$DOC_ID \
+  | python3 -c "import sys,json; [print(r['id']) for r in json.load(sys.stdin)['extracted_relations']]")
+
+# 全部批准
+for REL_ID in $REL_IDS; do
+  curl -s -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/$REL_ID \
+    -H "Content-Type: application/json" \
+    -d '{"action":"approve"}'
+done
+```
+
+---
+
+### POST /documents/{doc_id}/commit
+
+将所有 `approved` / `modified` 的候选关系提交到 Neo4j 图谱。
+
+- 跳过 `pending` 和 `rejected` 关系
+- 提交后文档状态变为 `committed`，不可重复提交
+- 关系 `provenance` 自动设置：
+  - 结构化模板（CMMS/FMEA/SUPPLIER）→ `structured_document`（初始置信度 0.65–0.85）
+  - 非结构化模板（8D/SHIFT/UNKNOWN）→ `expert_document`（初始置信度 0.50–0.85）
+- 所有提交关系状态为 `pending_review`（图谱层的第二道审核）
+
+**响应**：
+
+```json
+{
+  "doc_id": "a1b2c3d4e5f6",
+  "committed_count": 3,
+  "skipped_count": 1,
+  "relation_ids": ["3f7a9c1b", "8e2b4d6f", "1a9c3e5b"]
+}
+```
+
+---
+
+### 完整 Demo 流程（curl 命令）
+
+```bash
+# 1. 生成样本文档
+python scripts/generate_sample_docs.py
+
+# 2. 上传维修工单
+DOC_ID=$(curl -s -X POST http://localhost:8000/v1/documents/upload \
+  -F "file=@sample_docs/cmms_maintenance_orders.xlsx" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "Document ID: $DOC_ID"
+
+# 3. 轮询等待 AI 分析完成（状态变为 pending_review）
+until [ "$(curl -s http://localhost:8000/v1/documents/$DOC_ID | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")" = "pending_review" ]; do
+  echo "Waiting..."; sleep 1
+done
+
+# 4. 查看候选关系
+curl -s http://localhost:8000/v1/documents/$DOC_ID | python3 -m json.tool
+
+# 5. 批准第一条关系（替换 REL_ID）
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/REL_ID \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approve"}'
+
+# 6. 修改置信度后批准
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/annotate/REL_ID \
+  -H "Content-Type: application/json" \
+  -d '{"action": "modify", "modified_confidence": 0.90}'
+
+# 7. 提交到图谱
+curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
+```
+
+---
+
+## 8. 错误码
 
 | HTTP 状态码 | 错误场景 | 响应示例 |
 |------------|---------|---------|
@@ -383,7 +799,7 @@
 
 ---
 
-## 7. 通用 Schema
+## 9. 通用 Schema
 
 ### SourceType 枚举
 
@@ -394,6 +810,8 @@
 | `mes_structured` | MES/ERP 结构化导入 |
 | `llm_extracted` | LLM 从文本中抽取 |
 | `inference` | 系统推断 |
+| `structured_document` | 结构化文档解析（FMEA/CMMS 工单，Sprint 3）|
+| `expert_document` | 专家文档 LLM 抽取 + 人工标注（8D 报告/交接班日志，Sprint 3）|
 
 ### RelationStatus 枚举
 
