@@ -81,6 +81,83 @@ class DocumentSummary(BaseModel):
     created_at: datetime
 
 
+# ─── 阶段1/3：上传后澄清（MVP：静态问题 + 记录答案）──────────────────
+
+class ClarifyRequest(BaseModel):
+    answers: dict[str, str]
+    answered_by: str = "engineer"
+
+
+def _default_clarify_questions(template_type: TemplateType) -> list[dict]:
+    # MVP：静态 3 问，后续可按模板/领域动态生成
+    if template_type in (TemplateType.CMMS_MAINTENANCE, TemplateType.FMEA, TemplateType.SUPPLIER_DELIVERY):
+        return [
+            {
+                "question_id": "cq-001",
+                "type": "single_choice",
+                "prompt": "文档数据主要对应哪类设备？",
+                "options": [
+                    {"id": "dev-cnc", "label": "CNC/机加工"},
+                    {"id": "dev-injection", "label": "注塑/成型"},
+                    {"id": "dev-line", "label": "产线/物流"},
+                    {"id": "dev-unknown", "label": "不确定"},
+                ],
+                "required": False,
+            },
+            {
+                "question_id": "cq-002",
+                "type": "single_choice",
+                "prompt": "本批数据主要时间范围？",
+                "options": [
+                    {"id": "t-7d", "label": "近 7 天"},
+                    {"id": "t-30d", "label": "近 30 天"},
+                    {"id": "t-90d", "label": "近 90 天"},
+                    {"id": "t-unknown", "label": "不确定"},
+                ],
+                "required": False,
+            },
+            {
+                "question_id": "cq-003",
+                "type": "free_text",
+                "prompt": "是否有需要强调的上下文（例如高温/高湿/夜班）？",
+                "options": [],
+                "required": False,
+            },
+        ]
+
+    return [
+        {
+            "question_id": "cq-001",
+            "type": "single_choice",
+            "prompt": "文档主要属于哪类场景？",
+            "options": [
+                {"id": "sc-quality", "label": "质量异常/8D"},
+                {"id": "sc-shift", "label": "交接班/运行日志"},
+                {"id": "sc-unknown", "label": "不确定"},
+            ],
+            "required": False,
+        },
+        {
+            "question_id": "cq-002",
+            "type": "single_choice",
+            "prompt": "是否存在“已确认根因”的结论段落？",
+            "options": [
+                {"id": "yes", "label": "有（包含最终结论）"},
+                {"id": "no", "label": "没有（仅过程记录）"},
+                {"id": "unknown", "label": "不确定"},
+            ],
+            "required": False,
+        },
+        {
+            "question_id": "cq-003",
+            "type": "free_text",
+            "prompt": "请补充一个关键词（例如部件名/告警码），帮助更准确抽取：",
+            "options": [],
+            "required": False,
+        },
+    ]
+
+
 # ─── 辅助函数 ──────────────────────────────────────────────────────────
 
 def _get_store(request: Request) -> DocumentStore:
@@ -134,6 +211,7 @@ async def _process_document(
 
         relations = await extract_relations(parsed)
         store.set_relations(doc_id, relations)
+        store.set_clarify_questions(doc_id, _default_clarify_questions(parsed.template_type))
 
         logger.info(
             "document_ready_for_review",
@@ -266,7 +344,33 @@ async def get_document(doc_id: str, request: Request) -> DocumentRecord:
     record = store.get(doc_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+
+    # 若抽取已完成但问题还未生成（兼容旧记录），补齐默认澄清问题
+    if record.status in (DocumentStatus.PENDING_REVIEW, DocumentStatus.COMMITTED) and not record.clarify_questions:
+        store.set_clarify_questions(doc_id, _default_clarify_questions(record.template_type))
+        record = store.get(doc_id) or record
     return record
+
+
+@router.post("/{doc_id}/clarify", response_model=DocumentRecord)
+async def clarify_document(doc_id: str, body: ClarifyRequest, request: Request) -> DocumentRecord:
+    """
+    阶段1/3：提交上传后的澄清答案。
+
+    MVP：仅记录答案并回显 DocumentRecord；后续可据此重抽取/重排候选关系。
+    """
+    store = _get_store(request)
+    record = store.get(doc_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+
+    if record.status not in (DocumentStatus.PENDING_REVIEW, DocumentStatus.COMMITTED):
+        raise HTTPException(status_code=400, detail=f"文档当前状态为 {record.status}，无法澄清（需为 pending_review）")
+
+    store.set_clarify_answers(doc_id, body.answers)
+    updated = store.get(doc_id)
+    assert updated is not None
+    return updated
 
 
 @router.post("/{doc_id}/annotate/{rel_id}", response_model=DocumentRecord)

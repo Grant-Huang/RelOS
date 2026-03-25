@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { Bell, Search, ChevronRight } from 'lucide-react'
 import AlarmRootCauseCard from '../components/AlarmRootCauseCard'
-import { analyzeAlarm } from '../api/client'
+import { analyzeAlarmStream, postTelemetryEvent, streamAnswer } from '../api/client'
 
 const QUICK_ALARMS = [
   { code: 'VIB-001', device: 'device-M1', name: '1号机（注塑机）', desc: '振动超限' },
@@ -23,6 +23,14 @@ export default function AlarmAnalysis() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [stream, setStream] = useState({
+    summary: null,
+    evidence: [],
+    contributions: [],
+    question: null,
+    traceId: '',
+  })
+  const [answering, setAnswering] = useState(false)
 
   const handleQuick = (q) => {
     setForm({
@@ -40,14 +48,51 @@ export default function AlarmAnalysis() {
     setLoading(true)
     setResult(null)
     setError(null)
+    setStream({ summary: null, evidence: [], contributions: [], question: null, traceId: '' })
     try {
-      const data = await analyzeAlarm({
+      await analyzeAlarmStream(
+        {
         alarm_id: `alarm-${form.alarm_code}`,
         device_id: form.device_id,
         alarm_code: form.alarm_code,
         alarm_description: form.alarm_description,
-      })
-      setResult(data)
+        },
+        (evt, data) => {
+          if (evt === 'summary') {
+            setStream((s) => ({ ...s, summary: data, traceId: data.confidence_trace_id || s.traceId }))
+            postTelemetryEvent({
+              event_name: 'recommendation_shown',
+              confidence_trace_id: data.confidence_trace_id,
+              alarm_id: `alarm-${form.alarm_code}`,
+              device_id: form.device_id,
+              props: {
+                engine_used: data.engine_used,
+                confidence: data.confidence,
+              },
+            }).catch(() => {})
+          }
+          if (evt === 'evidence') {
+            setStream((s) => ({
+              ...s,
+              traceId: data.confidence_trace_id || s.traceId,
+              evidence: Array.isArray(data.evidence_relations) ? data.evidence_relations : s.evidence,
+            }))
+          }
+          if (evt === 'contributions') {
+            setStream((s) => ({
+              ...s,
+              traceId: data.confidence_trace_id || s.traceId,
+              contributions: Array.isArray(data.phase_contributions) ? data.phase_contributions : s.contributions,
+            }))
+          }
+          if (evt === 'question') {
+            setStream((s) => ({ ...s, question: data.question || null, traceId: data.confidence_trace_id || s.traceId }))
+          }
+          if (evt === 'done') {
+            setResult({ done: true })
+          }
+        }
+      )
     } catch (e) {
       setError(e.message)
     } finally {
@@ -55,19 +100,38 @@ export default function AlarmAnalysis() {
     }
   }
 
-  const extractResult = (data) => {
-    // 兼容后端不同响应结构
-    const rec = data?.recommendation || data?.root_cause_recommendation || data
-    return {
-      recommendedCause: rec?.recommended_cause || rec?.root_cause || '未能确定根因',
-      confidence: rec?.confidence ?? rec?.confidence_score ?? 0,
-      engineUsed: rec?.engine_used || 'rule_engine',
-      shadowMode: rec?.shadow_mode ?? true,
-      supportingRelations: rec?.supporting_relations || [],
+  const resultData = stream?.summary
+    ? {
+        recommendedCause: stream.summary.recommended_cause || '未能确定根因',
+        confidence: stream.summary.confidence ?? 0,
+        engineUsed: stream.summary.engine_used || 'rule_engine',
+        shadowMode: stream.summary.shadow_mode ?? true,
+        supportingRelations: stream.evidence || [],
+      }
+    : null
+
+  const handleAnswer = async (answer) => {
+    if (!stream.traceId || !stream.question?.question_id) return
+    setAnswering(true)
+    try {
+      await streamAnswer({
+        confidence_trace_id: stream.traceId,
+        question_id: stream.question.question_id,
+        answer,
+      })
+      postTelemetryEvent({
+        event_name: 'stream_question_answered',
+        confidence_trace_id: stream.traceId,
+        alarm_id: `alarm-${form.alarm_code}`,
+        device_id: form.device_id,
+        props: { question_id: stream.question.question_id, answer },
+      }).catch(() => {})
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setAnswering(false)
     }
   }
-
-  const resultData = result ? extractResult(result) : null
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -193,6 +257,29 @@ export default function AlarmAnalysis() {
             onConfirm={() => console.log('confirmed')}
             onReject={() => console.log('rejected')}
           />
+
+          {/* 流式问答（MVP：单问单答） */}
+          {stream.question && (
+            <div className="mt-4 bg-surface rounded-xl border border-gray-700 p-5">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">流式澄清问题</p>
+              <p className="text-white font-medium mt-2">{stream.question.prompt}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(stream.question.options || []).map((opt) => (
+                  <button
+                    key={opt.id}
+                    disabled={answering}
+                    onClick={() => handleAnswer(opt.id)}
+                    className="px-3 py-2 rounded-lg border border-gray-700 bg-bg text-sm text-gray-200 hover:border-gray-500 disabled:opacity-40"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-600 mt-3">
+                trace：<span className="font-mono">{stream.traceId || '—'}</span>
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@
 
 > **版本**：v0.4.0（Sprint 4）
 > **适用角色**：维修工程师、设备管理员、IT 集成人员
-> **更新日期**：2026-03-23
+> **更新日期**：2026-03-25（补充 `knowledge_phase` / `phase_weight` 口径）
 
 ---
 
@@ -35,7 +35,7 @@ RelOS 查询历史关系知识库
 
 ## 2. 核心概念
 
-理解这 3 个概念，就能理解系统的工作原理：
+理解下面这些概念，就能理解系统的工作原理：
 
 ### 2.1 关系（Relation）
 
@@ -50,6 +50,17 @@ RelOS 查询历史关系知识库
 - **来源**：工程师经验 / 传感器 / MES 系统 / AI 分析
 - **状态**：活跃 / 待审核 / 冲突 / 已归档
 - **半衰期**：多少天后置信度降低一半（经验知识 365 天，物理关系 10 年）
+- **知识阶段（`knowledge_phase`）**：这条知识来自哪个建设阶段（初始化 / 专家访谈 / 文档预训练 / 运行强化）
+- **阶段权重（`phase_weight`，0.0～1.0）**：不同阶段对最终可信度的调节系数；未填写时由系统按阶段给默认值
+
+**四阶段与默认阶段权重（与数据模型、API 文档一致）**：
+
+| knowledge_phase | 含义 | 默认 phase_weight |
+|-----------------|------|-------------------|
+| `bootstrap` | 公共知识初始化（公开资料、行业模板等） | 0.35 |
+| `interview` | 专家访谈、单条/批量专家录入 | 0.90 |
+| `pretrain` | 企业文档导入、AI 抽取后提交图谱（见 `/v1/documents/*`） | 0.70 |
+| `runtime` | 运行期反馈、在线强化（如 `POST /v1/relations/{id}/feedback`） | 1.00 |
 
 ### 2.2 数据飞轮
 
@@ -101,6 +112,42 @@ RelOS 查询历史关系知识库
 | `requires_human_review` | 是否需要人工审核 | `false` |
 | `shadow_mode` | 影子模式状态 | `true` |
 
+**管理层/高层自解释字段（新增）**：
+
+除了给一线工程师的 `reasoning` 之外，系统还会返回一组“可追溯解释”字段，适合老中层/高层快速判断与追责审计：
+
+| 字段 | 说明 | 适用人群 |
+|------|------|----------|
+| `explanation_summary` | 一屏摘要：结论 + 置信度 + 主要证据阶段贡献 | 高层 |
+| `evidence_relations` | 证据关系最小集合（可追溯到具体关系 ID 与来源） | 中层/审计 |
+| `phase_contributions` | 按 `knowledge_phase` 汇总的阶段贡献（解释阶段权重影响） | 中层 |
+| `confidence_trace_id` | 解释追踪 ID（用于日志/埋点/回放） | IT/审计 |
+
+示例（节选）：
+
+```json
+{
+  "explanation_summary": "推荐：component-bearing-M1 异常；置信度 0.85；主要证据阶段：interview（约 65%）",
+  "evidence_relations": [
+    {
+      "id": "rel-001",
+      "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
+      "confidence": 0.70,
+      "provenance": "manual_engineer",
+      "knowledge_phase": "interview",
+      "phase_weight": 0.90,
+      "status": "active",
+      "provenance_detail": "张工 20 年经验总结"
+    }
+  ],
+  "phase_contributions": [
+    {"knowledge_phase": "interview", "score": 0.63, "share": 0.65},
+    {"knowledge_phase": "runtime", "score": 0.34, "share": 0.35}
+  ],
+  "confidence_trace_id": "conf-trace-..."
+}
+```
+
 **三种推理路径**：
 
 ```
@@ -132,6 +179,8 @@ RelOS 查询历史关系知识库
   "target_node_type": "Component",
   "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
   "confidence": 0.85,
+  "knowledge_phase": "interview",
+  "phase_weight": 0.90,
   "provenance_detail": "20年经验，高温下振动告警85%是轴承问题",
   "engineer_id": "zhang-engineer"
 }
@@ -151,12 +200,12 @@ RelOS 查询历史关系知识库
 
 **Excel 模板格式**：
 
-| 源节点ID | 源节点类型 | 目标节点ID | 目标节点类型 | 关系类型 | 置信度 |
-|---------|----------|----------|------------|---------|-------|
-| alarm-VIB-001 | Alarm | component-bearing-M1 | Component | ALARM__INDICATES__COMPONENT_FAILURE | 0.85 |
-| device-M1 | Device | alarm-VIB-001 | Alarm | DEVICE__TRIGGERS__ALARM | 0.90 |
+| 源节点ID | 源节点类型 | 目标节点ID | 目标节点类型 | 关系类型 | 置信度 | 知识阶段（可选）| 阶段权重（可选）|
+|---------|----------|----------|------------|---------|-------|----------------|----------------|
+| alarm-VIB-001 | Alarm | component-bearing-M1 | Component | ALARM__INDICATES__COMPONENT_FAILURE | 0.85 | interview | 0.90 |
+| device-M1 | Device | alarm-VIB-001 | Alarm | DEVICE__TRIGGERS__ALARM | 0.90 | interview | 0.90 |
 
-> 💡 **小提示**：列名支持中英文，顺序不限。
+> 💡 **小提示**：列名支持中英文，顺序不限。`knowledge_phase` / `phase_weight` 可省略，省略时服务端按阶段给默认权重（专家录入一般为 `interview` / `0.90`）。
 
 **专家知识录入的特殊规则**：
 - 置信度按原值保存（不压缩）
@@ -190,6 +239,8 @@ POST /v1/relations/{relation_id}/feedback
 
 - `confirmed: true` → 置信度 +0.15，状态变为"活跃"
 - `confirmed: false` → 置信度 -0.30，若低于 0.2 则归档
+
+该接口属于**运行期强化（阶段 4）**：服务端会将本次反馈关联为 `knowledge_phase = "runtime"`，并可将关系按策略标记为运行期权重（默认 `phase_weight = 1.00`）。请求体仍只需 `engineer_id` 与 `confirmed`，无需手写阶段字段。
 
 #### 查询设备子图
 
@@ -308,7 +359,7 @@ curl -X POST http://localhost:8000/v1/decisions/analyze-alarm \
 **步骤 4**：确认结果后提交反馈
 
 ```bash
-# 如果确认是轴承问题
+# 如果确认是轴承问题（运行期强化：服务端记为 knowledge_phase=runtime，phase_weight 按策略可为 1.00）
 curl -X POST http://localhost:8000/v1/relations/rel-001/feedback \
   -H "Content-Type: application/json" \
   -d '{"engineer_id": "zhang-engineer", "confirmed": true}'
@@ -341,6 +392,8 @@ curl -X POST http://localhost:8000/v1/expert-init \
     "target_node_type": "Component",
     "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
     "confidence": 0.90,
+    "knowledge_phase": "interview",
+    "phase_weight": 0.90,
     "provenance_detail": "张工：温度告警90%是冷却系统问题，检查冷却液水位和泵",
     "engineer_id": "zhang-engineer"
   }'
@@ -404,6 +457,8 @@ curl http://localhost:8000/v1/relations/subgraph \
 | 关系类型 | relation_type | ✅ | 见下方关系类型表 |
 | 置信度 | confidence | ❌ | 0.0~1.0，默认 0.75 |
 | 来源详情 | provenance_detail | ❌ | 工单号、日期等 |
+| 知识阶段 | knowledge_phase | ❌ | `interview` / `pretrain` 等，省略时由系统推断 |
+| 阶段权重 | phase_weight | ❌ | 0.0~1.0，省略时按 `knowledge_phase` 默认回填 |
 
 **支持的关系类型**：
 
@@ -614,6 +669,14 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 | MES/ERP 导入 | `mes_structured` | 结构化，alpha=0.4 |
 | AI 分析抽取 | `llm_extracted` | 置信度上限 0.85，强制待审核 |
 | 系统推断 | `inference` | 自动生成，alpha=0.3 |
+
+## 知识阶段与阶段权重（knowledge_phase / phase_weight）
+
+与 `docs/data-model.md`、`docs/api.md` 一致：每条关系可携带**知识阶段**与**阶段权重**，用于解释“这条知识从哪一阶段进入图谱、对最终置信度如何加权”。调用 API 时：
+
+- **专家单条/批量/Excel 录入**：建议显式写 `knowledge_phase: "interview"` 与 `phase_weight: 0.90`（也可省略，由服务端默认）。
+- **文档摄取提交到图谱**（`POST /v1/documents/{doc_id}/commit`）：服务端通常写入 `knowledge_phase: "pretrain"`、`phase_weight: 0.70`。
+- **工程师反馈**（`POST /v1/relations/{id}/feedback`）：无需在 JSON 里写阶段字段；系统按**运行期强化**处理，对应 `runtime` / 默认 `1.00`。
 
 ## 置信度参考
 

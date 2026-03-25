@@ -43,6 +43,25 @@
 | `action/engine.py` | ≥ 85% | ~80% |
 | `api/v1/` | ≥ 70% | ~20%（缺集成测试）|
 
+### 1.4 易用性改进的验证与埋点（新增）
+
+易用性改进（阶段 2/4、解释性输出）需要“可测量”。本节定义最小埋点方案与验证方式，供 Sprint 4 及后续灰度使用。
+
+#### 1.4.1 事件埋点规范（事件名 + 必备字段）
+
+统一字段（所有事件都应包含）：
+- `event_id`: UUID
+- `timestamp`: ISO8601
+- `actor_role`: `frontline_engineer` / `manager` / `executive` / `it_admin`
+- `actor_id`: string（可匿名化/脱敏）
+- `factory_id`: string（多租户开启后必填）
+- `session_id`: string（一次告警处理会话）
+
+事件列表（最小集合）：
+1. `recommendation_shown`\n   - 触发：前端展示告警推荐卡\n   - 字段：`alarm_id`、`device_id`、`engine_used`、`confidence`、`confidence_trace_id`\n2. `recommendation_explained`\n   - 触发：用户展开/查看依据（L2/L3）\n   - 字段：`view_level`（`L1/L2/L3`）、`evidence_count`\n3. `feedback_submitted`\n   - 触发：点击确认/否定/不确定\n   - 字段：`relation_id`、`confirmed`、`knowledge_phase`（应为 `runtime`）、`phase_weight`（期望 1.00）\n4. `alt_suggestion_shown`\n   - 触发：否定后展示替代建议\n   - 字段：`suggestion_count`\n5. `alt_suggestion_accepted`\n   - 触发：一键采纳替代建议\n   - 字段：`accepted_relation_type`、`new_relation_id`\n6. `expert_interview_task_completed`\n   - 触发：阶段 2 微任务卡完成\n   - 字段：`task_type`、`duration_ms`、`result`（`submitted/draft/unsure`）\n\n#### 1.4.2 实验设计（A/B 或分厂灰度）
+
+- A 组：现有流程（无分层解释、无替代建议、无批量确认提示）\n- B 组：无感反馈 + 分层解释（L1/L2/L3） + 替代建议\n\n验收指标（与 design-plan.md 保持一致，作为测试门槛）：\n- 阶段 2 单条录入中位时长 ≤ 20 秒\n- 阶段 2 访谈完成率 ≥ 85%\n- 阶段 4 反馈触发率 ≥ 60%\n- 阶段 4 无感标注转化率 ≥ 30%\n- 管理层解释可用性评分 ≥ 4.2/5（问卷或访谈量表）
+
 ---
 
 ## 2. 现有单元测试（41 个）

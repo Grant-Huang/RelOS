@@ -14,12 +14,14 @@
 1. [健康检查](#1-健康检查)
 2. [关系管理](#2-关系管理)
 3. [决策分析](#3-决策分析)
-4. [专家初始化（Sprint 3）](#4-专家初始化-sprint-3)
-5. [图谱统计（Sprint 3）](#5-图谱统计-sprint-3)
-6. [演示场景（Sprint 3 扩展）](#6-演示场景-sprint-3-扩展)
-7. [文档摄取与 AI 标注（Sprint 3 扩展）](#7-文档摄取与-ai-标注-sprint-3-扩展)
-8. [错误码](#8-错误码)
-9. [通用 Schema](#9-通用-schema)
+4. [访谈微卡片（阶段 2）](#4-访谈微卡片阶段-2)
+5. [专家初始化（Sprint 3）](#5-专家初始化-sprint-3)
+6. [图谱统计（Sprint 3）](#6-图谱统计-sprint-3)
+7. [演示场景（Sprint 3 扩展）](#7-演示场景-sprint-3-扩展)
+8. [文档摄取与 AI 标注（Sprint 3 扩展）](#8-文档摄取与-ai-标注-sprint-3-扩展)
+9. [错误码](#9-错误码)
+10. [通用 Schema](#10-通用-schema)
+11. [Telemetry（MVP）](#11-telemetrymvp)
 
 ---
 
@@ -62,6 +64,8 @@
   "target_node_id": "component-bearing-M1",
   "target_node_type": "Component",
   "confidence": 0.70,
+  "knowledge_phase": "interview",
+  "phase_weight": 0.90,
   "provenance": "manual_engineer",
   "provenance_detail": "张工 20 年经验总结",
   "extracted_by": "human:operator-zhang",
@@ -75,6 +79,7 @@
 
 **注意**：
 - `provenance = "llm_extracted"` 时，`confidence` 自动夹紧到 0.85，`status` 强制为 `pending_review`
+- 未传 `knowledge_phase` / `phase_weight` 时，系统按来源自动填充默认值（见通用 Schema）
 - `id` 字段可省略，系统自动生成 UUID
 
 **响应** `201 Created`：返回完整的 RelationObject。
@@ -133,6 +138,11 @@
 - 否定：`confidence = max(0.0, confidence - 0.30)`；若 `confidence < 0.2`，`status → archived`
 
 **响应** `200 OK`：返回更新后的 RelationObject。
+
+**阶段强化说明（阶段 4 -> 强化闭环）**：
+- 反馈事件默认记为 `knowledge_phase = "runtime"`
+- 若反馈来自运行期真实操作，系统可将该关系的 `phase_weight` 提升到运行期权重（建议 1.00）
+- 建议在 `properties.feedback_context` 中记录操作上下文（班次、环境、工单）
 
 ---
 
@@ -207,7 +217,26 @@
   "requires_human_review": false,
   "shadow_mode": true,
   "context_relations_count": 4,
-  "processing_time_ms": 87.3
+  "processing_time_ms": 87.3,
+
+  "explanation_summary": "推荐：component-bearing-M1 异常；置信度 0.85；主要证据阶段：interview（约 65%）",
+  "evidence_relations": [
+    {
+      "id": "rel-001",
+      "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
+      "confidence": 0.70,
+      "provenance": "manual_engineer",
+      "knowledge_phase": "interview",
+      "phase_weight": 0.90,
+      "status": "active",
+      "provenance_detail": "张工 20 年经验总结"
+    }
+  ],
+  "phase_contributions": [
+    {"knowledge_phase": "interview", "score": 0.63, "share": 0.65},
+    {"knowledge_phase": "runtime", "score": 0.34, "share": 0.35}
+  ],
+  "confidence_trace_id": "conf-trace-3fa2c9e8d1b64c6ab2a5c4c1"
 }
 ```
 
@@ -217,8 +246,65 @@
 | `requires_human_review` | `true` 时前端应显示 HITL 提示 |
 | `shadow_mode` | `true` 时操作未实际执行 |
 | `processing_time_ms` | 端到端处理时间 |
+| `explanation_summary` | 供管理层/高层的“一屏简短解释”（由证据阶段贡献自动生成） |
+| `evidence_relations` | 解释证据关系的最小集合（用于追溯） |
+| `phase_contributions` | 按 `knowledge_phase` 汇总的阶段贡献（用于分层可解释性） |
+| `confidence_trace_id` | 本次决策的可审计追踪 ID（便于日志/埋点关联） |
 
 ---
+
+### POST /decisions/analyze-alarm/stream
+
+告警根因分析（**SSE 真流式**）。复用 `POST /decisions/analyze-alarm` 的计算逻辑与解释字段，只改变返回形式为分段事件：
+
+- `summary`：先给 L1（结论/置信度/摘要）
+- `evidence`：推送证据关系（L2）
+- `contributions`：推送阶段贡献（L3）
+- `question`：推送 1 个澄清问题（可跳过）
+- `done`：结束
+
+**请求体**：同 `POST /decisions/analyze-alarm`（`AlarmEvent`）。
+
+**响应**：`200 OK`，`Content-Type: text/event-stream`
+
+事件示例（节选）：
+
+```
+event: summary
+data: {"confidence_trace_id":"conf-trace-...","recommended_cause":"...","confidence":0.85,"engine_used":"rule_engine","requires_human_review":false,"shadow_mode":true,"explanation_summary":"..."}
+
+event: evidence
+data: {"confidence_trace_id":"conf-trace-...","evidence_relations":[{"id":"rel-001","relation_type":"...","confidence":0.7,"provenance":"manual_engineer","knowledge_phase":"interview","phase_weight":0.9,"status":"active","provenance_detail":"..."}],"is_final":true}
+
+event: done
+data: {"confidence_trace_id":"conf-trace-...","ok":true}
+```
+
+---
+
+### POST /decisions/stream-answer
+
+阶段 4 流式问答的输入接口：用于提交 `analyze-alarm/stream` 返回的 `question` 回答。
+
+**请求体**：
+
+```json
+{
+  "confidence_trace_id": "conf-trace-...",
+  "question_id": "q-001",
+  "answer": "opt-yes"
+}
+```
+
+**响应**（统一返回结构）：
+
+```json
+{
+  "status": "success",
+  "data": { "accepted": true },
+  "message": ""
+}
+```
 
 ### POST /decisions/execute-action
 
@@ -271,9 +357,98 @@
 
 ---
 
+## 4. 访谈微卡片（阶段 2）
+
+> 微卡片是“类流式向导”：一次只做一个 15 秒内的微任务（确认/否定/不确定，或新建关系）。
+
+### POST /interview/sessions
+
+创建访谈会话（MVP：从 `pending_review` 队列生成一组“关系确认卡”）。
+
+**请求体**：
+
+```json
+{
+  "engineer_id": "eng-1",
+  "device_id": "device-M1",
+  "limit": 20
+}
+```
+
+**响应** `201 Created`：
+
+```json
+{
+  "session_id": "ivs-...",
+  "total_cards": 12
+}
+```
+
 ---
 
-## 4. 专家初始化（Sprint 3）
+### GET /interview/sessions/{session_id}/next-card
+
+拉取下一张卡片。
+
+**响应** `200 OK`（示例：关系确认卡）：
+
+```json
+{
+  "session_id": "ivs-...",
+  "card": {
+    "card_id": "card-ivs-...-0",
+    "type": "relation_confirm",
+    "hint": "请确认这条关系是否正确（可选择不确定）",
+    "relation": { "id": "rel-001", "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE", "source_node_id": "device-M1", "source_node_type": "Device", "target_node_id": "component-bearing-M1", "target_node_type": "Component", "confidence": 0.6, "provenance": "llm_extracted", "provenance_detail": "从维修记录抽取", "extracted_by": "llm:mock", "half_life_days": 365, "status": "pending_review", "conflict_with": [], "properties": {} }
+  }
+}
+```
+
+卡片结束时会返回：
+
+```json
+{
+  "session_id": "ivs-...",
+  "card": { "card_id": "done", "type": "done", "message": "本次访谈卡片已完成" }
+}
+```
+
+---
+
+### POST /interview/sessions/{session_id}/submit-card
+
+提交卡片结果。
+
+- `confirm/reject`：等价于人工反馈（会触发运行期强化字段写入）
+- `unsure`：保留 `pending_review`，但记录弱反馈（审计/回访用）
+- `create_relation`：创建一条人工录入关系（访谈阶段），直接 `active`
+
+**请求体**（示例：确认）：
+
+```json
+{
+  "card_id": "card-ivs-...-0",
+  "action": "confirm",
+  "relation_id": "rel-001"
+}
+```
+
+**响应** `200 OK`：
+
+```json
+{
+  "session_id": "ivs-...",
+  "accepted": true,
+  "saved_relation_id": "rel-001",
+  "message": "ok"
+}
+```
+
+---
+
+---
+
+## 5. 专家初始化（Sprint 3）
 
 ### POST /expert-init
 
@@ -288,6 +463,8 @@
   "target_node_type": "Alarm",
   "relation_type": "DEVICE__TRIGGERS__ALARM",
   "confidence": 0.92,
+  "knowledge_phase": "interview",
+  "phase_weight": 0.90,
   "provenance_detail": "维修工单 WO-2026-001",
   "engineer_id": "zhang-engineer",
   "half_life_days": 365,
@@ -298,7 +475,14 @@
 **响应** `201 Created`：
 ```json
 {
-  "relation": { ...RelationObject },
+  "relation": {
+    "id": "rel-8c2f",
+    "relation_type": "DEVICE__TRIGGERS__ALARM",
+    "confidence": 0.92,
+    "knowledge_phase": "interview",
+    "phase_weight": 0.90,
+    "status": "active"
+  },
   "is_new": true,
   "message": "关系已创建"
 }
@@ -344,7 +528,7 @@
 
 ---
 
-## 5. 图谱统计（Sprint 3）
+## 6. 图谱统计（Sprint 3）
 
 ### GET /metrics
 
@@ -373,7 +557,7 @@
 
 ---
 
-## 6. 演示场景（Sprint 3 扩展）
+## 7. 演示场景（Sprint 3 扩展）
 
 > 面向中层（运营）和高层（战略）用户的聚合分析端点。
 > 所有数据均来自 Neo4j 中的 RelationObject，无独立数据库。
@@ -579,7 +763,7 @@
 
 ---
 
-## 7. 文档摄取与 AI 标注（Sprint 3 扩展）
+## 8. 文档摄取与 AI 标注（Sprint 3 扩展）
 
 > **工作流**：上传文档 → AI 分析（Claude）→ 人工标注（approve/reject/modify）→ 提交图谱
 >
@@ -650,6 +834,16 @@
   "filename": "cmms_maintenance_orders.xlsx",
   "template_type": "cmms_maintenance",
   "status": "pending_review",
+  "clarify_questions": [
+    {
+      "question_id": "cq-001",
+      "type": "single_choice",
+      "prompt": "文档数据主要对应哪类设备？",
+      "options": [{"id": "dev-cnc", "label": "CNC/机加工"}],
+      "required": false
+    }
+  ],
+  "clarify_answers": { "cq-001": "dev-cnc" },
   "extracted_relations": [
     {
       "id": "3f7a9c1b",
@@ -683,6 +877,28 @@
 | `pending_review` | 候选关系已生成，等待人工标注 |
 | `committed` | 已全部提交到图谱 |
 | `failed` | 处理出错（见 `error_message`）|
+
+---
+
+### POST /documents/{doc_id}/clarify
+
+阶段 1/3：上传后的“流式澄清”接口，用于提交澄清问题的答案（用于收敛抽取空间、提升候选关系质量）。
+
+MVP 当前行为：**仅记录并回显**答案，后续可在此基础上实现“重抽取/重排序/候选逐条到达”的完整澄清流。
+
+**请求体**：
+
+```json
+{
+  "answers": {
+    "cq-001": "dev-cnc",
+    "cq-003": "高温 >35°C"
+  },
+  "answered_by": "engineer"
+}
+```
+
+**响应**：返回更新后的完整 `DocumentRecord`（含 `clarify_answers`）。
 
 ---
 
@@ -736,6 +952,7 @@ done
 - 关系 `provenance` 自动设置：
   - 结构化模板（CMMS/FMEA/SUPPLIER）→ `structured_document`（初始置信度 0.65–0.85）
   - 非结构化模板（8D/SHIFT/UNKNOWN）→ `expert_document`（初始置信度 0.50–0.85）
+- 关系阶段字段自动设置：`knowledge_phase = "pretrain"`，`phase_weight = 0.70`
 - 所有提交关系状态为 `pending_review`（图谱层的第二道审核）
 
 **响应**：
@@ -745,7 +962,9 @@ done
   "doc_id": "a1b2c3d4e5f6",
   "committed_count": 3,
   "skipped_count": 1,
-  "relation_ids": ["3f7a9c1b", "8e2b4d6f", "1a9c3e5b"]
+  "relation_ids": ["3f7a9c1b", "8e2b4d6f", "1a9c3e5b"],
+  "knowledge_phase": "pretrain",
+  "phase_weight": 0.70
 }
 ```
 
@@ -787,7 +1006,7 @@ curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
 
 ---
 
-## 8. 错误码
+## 9. 错误码
 
 | HTTP 状态码 | 错误场景 | 响应示例 |
 |------------|---------|---------|
@@ -799,7 +1018,30 @@ curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
 
 ---
 
-## 9. 通用 Schema
+## 10. 通用 Schema
+
+### KnowledgePhase 枚举（新增）
+
+| 值 | 阶段 | 说明 |
+|----|------|------|
+| `bootstrap` | 阶段 1 | 公共知识初始化（公开报告/文献/网络） |
+| `interview` | 阶段 2 | 专家访谈与关系补录 |
+| `pretrain` | 阶段 3 | 企业文档导入与预训练 |
+| `runtime` | 阶段 4 | 运行期在线反馈与强化 |
+
+### phase_weight 字段（新增）
+
+| knowledge_phase | 默认值（建议） |
+|----------------|---------------|
+| `bootstrap` | 0.35 |
+| `interview` | 0.90 |
+| `pretrain` | 0.70 |
+| `runtime` | 1.00 |
+
+约定：
+- 该字段范围为 `0.0–1.0`
+- 若请求未显式传入，服务端按 `knowledge_phase` 自动回填
+- 该字段用于置信度计算排序与可解释性展示，不替代 `confidence` 本身
 
 ### SourceType 枚举
 
@@ -834,3 +1076,38 @@ curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
 | `completed` | 已完成 |
 | `failed` | 已失败 |
 | `rolled_back` | 已回滚 |
+
+---
+
+## 11. Telemetry（MVP）
+
+最小埋点接收接口，用于验证阶段 2/4 易用性改进的效果（见 `docs/test-plan.md §1.4`）。
+
+### POST /telemetry/events
+
+提交一条埋点事件。
+
+**请求体**：
+
+```json
+{
+  "event_name": "recommendation_shown",
+  "actor_role": "frontline_engineer",
+  "actor_id": "operator-zhang",
+  "session_id": "sess-001",
+  "confidence_trace_id": "conf-trace-...",
+  "alarm_id": "ALM-20260322-001",
+  "device_id": "device-M1",
+  "props": { "engine_used": "rule_engine", "confidence": 0.85 }
+}
+```
+
+**响应**：
+
+```json
+{ "status": "success", "data": { "accepted": true }, "message": "" }
+```
+
+### GET /telemetry/events?limit=50
+
+调试用：返回最近 N 条事件（MVP 仅用于开发验证）。

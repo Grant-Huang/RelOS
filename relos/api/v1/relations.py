@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from relos.core.engine import RelationEngine
-from relos.core.models import RelationObject
+from relos.core.models import Node, RelationObject
 from relos.core.repository import RelationRepository
 
 router = APIRouter()
@@ -74,6 +74,22 @@ async def create_relation(
     若图中已存在相同节点对 + 同类型关系，执行置信度合并（加权滑动平均）。
     """
     repo = RelationRepository(request.app.state.neo4j_driver)
+
+    # 确保节点存在（关系写入前置条件：upsert_relation 使用 MATCH src/tgt）
+    await repo.upsert_node(
+        Node(
+            id=relation.source_node_id,
+            node_type=relation.source_node_type,
+            name=relation.source_node_id,
+        )
+    )
+    await repo.upsert_node(
+        Node(
+            id=relation.target_node_id,
+            node_type=relation.target_node_type,
+            name=relation.target_node_id,
+        )
+    )
 
     existing = await _find_existing(repo, relation)
     if existing:

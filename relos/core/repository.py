@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+import json
+
 import structlog
 from neo4j import AsyncDriver
 
@@ -74,6 +76,9 @@ class RelationRepository:
             provenance_detail: $provenance_detail,
             status:           $status,
             half_life_days:   $half_life_days,
+            knowledge_phase: $knowledge_phase,
+            phase_weight:    $phase_weight,
+            properties_json: $properties_json,
             updated_at:       $updated_at,
             conflict_with:    $conflict_with
         }}
@@ -90,6 +95,9 @@ class RelationRepository:
                 provenance_detail=relation.provenance_detail,
                 status=relation.status.value,
                 half_life_days=relation.half_life_days,
+                knowledge_phase=relation.knowledge_phase.value if relation.knowledge_phase else None,
+                phase_weight=relation.phase_weight,
+                properties_json=json.dumps(relation.properties, ensure_ascii=True),
                 updated_at=relation.updated_at.isoformat(),
                 conflict_with=relation.conflict_with,
             )
@@ -102,9 +110,21 @@ class RelationRepository:
         """
         query = """
         MATCH ()-[r {id: $rel_id}]->()
-        RETURN r, type(r) AS rel_type,
-               startNode(r).id AS src_id, startNode(r).node_type AS src_type,
-               endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type
+        RETURN
+            r.id AS rel_id,
+            type(r) AS rel_type,
+            startNode(r).id AS src_id, startNode(r).node_type AS src_type,
+            endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type,
+            r.confidence AS confidence,
+            r.provenance AS provenance,
+            r.provenance_detail AS provenance_detail,
+            r.status AS status,
+            r.half_life_days AS half_life_days,
+            r.knowledge_phase AS knowledge_phase,
+            r.phase_weight AS phase_weight,
+            r.updated_at AS updated_at,
+            r.conflict_with AS conflict_with,
+            r.properties_json AS properties_json
         """
         async with self._driver.session(database=self._db) as session:
             result = await session.run(query, rel_id=relation_id)
@@ -142,9 +162,21 @@ class RelationRepository:
         WITH r
         WHERE r.confidence >= $min_confidence
           AND r.status IN $statuses
-        RETURN r, type(r) AS rel_type,
-               startNode(r).id AS src_id, startNode(r).node_type AS src_type,
-               endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type
+        RETURN
+            r.id AS rel_id,
+            type(r) AS rel_type,
+            startNode(r).id AS src_id, startNode(r).node_type AS src_type,
+            endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type,
+            r.confidence AS confidence,
+            r.provenance AS provenance,
+            r.provenance_detail AS provenance_detail,
+            r.status AS status,
+            r.half_life_days AS half_life_days,
+            r.knowledge_phase AS knowledge_phase,
+            r.phase_weight AS phase_weight,
+            r.updated_at AS updated_at,
+            r.conflict_with AS conflict_with,
+            r.properties_json AS properties_json
         ORDER BY r.confidence DESC
         """
         async with self._driver.session(database=self._db) as session:
@@ -176,9 +208,21 @@ class RelationRepository:
         """
         query = f"""
         MATCH (src {{id: $src_id}})-[r:{relation_type} {{}}]->(tgt {{id: $tgt_id}})
-        RETURN r, type(r) AS rel_type,
-               startNode(r).id AS src_id, startNode(r).node_type AS src_type,
-               endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type
+        RETURN
+            r.id AS rel_id,
+            type(r) AS rel_type,
+            startNode(r).id AS src_id, startNode(r).node_type AS src_type,
+            endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type,
+            r.confidence AS confidence,
+            r.provenance AS provenance,
+            r.provenance_detail AS provenance_detail,
+            r.status AS status,
+            r.half_life_days AS half_life_days,
+            r.knowledge_phase AS knowledge_phase,
+            r.phase_weight AS phase_weight,
+            r.updated_at AS updated_at,
+            r.conflict_with AS conflict_with,
+            r.properties_json AS properties_json
         LIMIT 1
         """
         async with self._driver.session(database=self._db) as session:
@@ -234,9 +278,21 @@ class RelationRepository:
         query = """
         MATCH ()-[r]->()
         WHERE r.status = 'pending_review'
-        RETURN r, type(r) AS rel_type,
-               startNode(r).id AS src_id, startNode(r).node_type AS src_type,
-               endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type
+        RETURN
+            r.id AS rel_id,
+            type(r) AS rel_type,
+            startNode(r).id AS src_id, startNode(r).node_type AS src_type,
+            endNode(r).id AS tgt_id, endNode(r).node_type AS tgt_type,
+            r.confidence AS confidence,
+            r.provenance AS provenance,
+            r.provenance_detail AS provenance_detail,
+            r.status AS status,
+            r.half_life_days AS half_life_days,
+            r.knowledge_phase AS knowledge_phase,
+            r.phase_weight AS phase_weight,
+            r.updated_at AS updated_at,
+            r.conflict_with AS conflict_with,
+            r.properties_json AS properties_json
         ORDER BY r.confidence DESC
         LIMIT $limit
         """
@@ -250,19 +306,26 @@ class RelationRepository:
     @staticmethod
     def _record_to_relation(record: dict[str, Any]) -> RelationObject:
         """将 Neo4j 查询结果转换为 RelationObject。"""
-        r = record["r"]
+        properties_json = record.get("properties_json", "{}") or "{}"
+        try:
+            properties: dict[str, Any] = json.loads(properties_json)
+        except Exception:
+            properties = {}
         return RelationObject(
-            id=r["id"],
+            id=record["rel_id"],
             relation_type=record["rel_type"],
             source_node_id=record["src_id"],
             source_node_type=record["src_type"],
             target_node_id=record["tgt_id"],
             target_node_type=record["tgt_type"],
-            confidence=r["confidence"],
-            provenance=r["provenance"],
-            provenance_detail=r.get("provenance_detail", ""),
-            status=r["status"],
-            half_life_days=r.get("half_life_days", 90),
-            updated_at=datetime.fromisoformat(r["updated_at"]),
-            conflict_with=r.get("conflict_with", []),
+            confidence=record["confidence"],
+            provenance=record["provenance"],
+            provenance_detail=record.get("provenance_detail", "") or "",
+            status=record["status"],
+            half_life_days=record.get("half_life_days", 90) or 90,
+            knowledge_phase=record.get("knowledge_phase", None),
+            phase_weight=record.get("phase_weight", None),
+            updated_at=datetime.fromisoformat(record["updated_at"]),
+            conflict_with=record.get("conflict_with", []) or [],
+            properties=properties,
         )

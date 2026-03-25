@@ -7,6 +7,7 @@ import {
   Bell,
   ClipboardCheck,
   UserCog,
+  MessagesSquare,
   Factory,
   TrendingUp,
   Activity,
@@ -17,13 +18,14 @@ const NAV_ITEMS = [
   { to: '/alarm', label: '告警分析', icon: Bell },
   { to: '/hitl', label: '待审核关系', icon: ClipboardCheck },
   { to: '/expert-init', label: '专家初始化', icon: UserCog },
+  { to: '/interview', label: '访谈微卡片', icon: MessagesSquare },
   { to: '/line-efficiency', label: '产线效率', icon: Factory },
   { to: '/strategic-sim', label: '战略模拟', icon: TrendingUp },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ className = '', onNavigate }) {
   return (
-    <aside className="w-56 flex-shrink-0 bg-surface border-r border-gray-700 flex flex-col">
+    <aside className={`w-56 flex-shrink-0 bg-surface border-r border-gray-700 flex flex-col ${className}`}>
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-700">
         <div className="flex items-center gap-2.5">
@@ -42,6 +44,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={() => onNavigate?.()}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive

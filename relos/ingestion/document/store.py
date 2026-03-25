@@ -106,3 +106,14 @@ class DocumentStore:
                 "extracted_relations": relations,
                 "status": DocumentStatus.PENDING_REVIEW,
             })
+
+    def set_clarify_questions(self, doc_id: str, questions: list[dict]) -> None:
+        """设置澄清问题（阶段1/3：上传后引导）。"""
+        if rec := self._records.get(doc_id):
+            self._records[doc_id] = rec.model_copy(update={"clarify_questions": questions})
+
+    def set_clarify_answers(self, doc_id: str, answers: dict[str, str]) -> None:
+        """提交澄清答案（MVP：仅记录，后续可触发重抽取/重排）。"""
+        if rec := self._records.get(doc_id):
+            merged = {**(rec.clarify_answers or {}), **answers}
+            self._records[doc_id] = rec.model_copy(update={"clarify_answers": merged})

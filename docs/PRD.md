@@ -128,12 +128,14 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 ### 4.1 关系接入与标准化（Ingestion Layer）
 
 **FR-01：多源关系接入**
-- 系统必须支持以下来源的关系接入：手动录入（工程师）、传感器实时数据、MES 结构化导入、LLM 文本抽取
+- 系统必须支持四阶段知识渠道：初始化（公开知识）、调研（专家访谈）、预训练（企业文档导入）、运行（在线反馈强化）
+- 在实现层面需覆盖：手动录入（工程师）、传感器实时数据、MES/Excel 结构化导入、LLM 文本抽取
 - 所有来源必须收敛到统一的 `RelationObject` Schema
 
 **FR-02：置信度初始化**
 - 不同来源的关系必须按规则初始化置信度区间（详见数据模型文档）
 - LLM 抽取的关系置信度硬上限 0.85
+- 不同阶段知识需携带阶段权重（`phase_weight`），用于最终置信度计算与排序（与来源 alpha、时间衰减共同生效）
 
 **FR-03：LLM 关系强制待审**
 - 所有 LLM 抽取的关系必须进入 `pending_review` 状态，不允许直接变为 `active`
@@ -156,6 +158,7 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 **FR-07：人工反馈**
 - 工程师确认关系：confidence += 0.15，状态 → active
 - 工程师否定关系：confidence -= 0.30，confidence < 0.2 则 archived
+- 运行阶段必须支持随时触发阶段 2/3 强化任务（专家补录、文档再导入），形成闭环学习
 
 ### 4.3 上下文编译（Context Engine）
 
@@ -225,6 +228,14 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - `GET /v1/scenarios/risk-radar`：场景10 企业级风险雷达
 - `GET /v1/scenarios/resource-optimization`：场景11 资源配置优化
 - `POST /v1/scenarios/strategic-simulation`：场景12 战略决策模拟
+- `POST /v1/expert-init/*`：专家访谈与关系补录接口（阶段 2）
+- `POST /v1/documents/import`：企业文档导入与预训练接口（阶段 3）
+
+**FR-18：阶段化知识治理（新增）**
+- 系统必须记录关系的知识阶段（`knowledge_phase`：bootstrap/interview/pretrain/runtime）
+- 阶段 2 与阶段 3 必须支持多轮执行与重复强化
+- 运行阶段中，用户日常操作反馈应自动沉淀为最小标注事件（可审计、可回放）
+- 阶段切换与强化任务应支持人工触发与策略触发两种模式
 
 ---
 
