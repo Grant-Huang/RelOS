@@ -1,68 +1,117 @@
 /**
- * Sidebar — 左侧导航栏
+ * Sidebar — 左侧导航栏（原型 v2 风格）
  */
-import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Bell,
-  ClipboardCheck,
-  UserCog,
-  MessagesSquare,
-  Factory,
-  TrendingUp,
-  Activity,
-} from 'lucide-react'
+import { NavLink, useLocation } from 'react-router-dom'
 
-const NAV_ITEMS = [
-  { to: '/', label: '总览', icon: LayoutDashboard, end: true },
-  { to: '/alarm', label: '告警分析', icon: Bell },
-  { to: '/hitl', label: '待审核关系', icon: ClipboardCheck },
-  { to: '/expert-init', label: '专家初始化', icon: UserCog },
-  { to: '/interview', label: '访谈微卡片', icon: MessagesSquare },
-  { to: '/line-efficiency', label: '产线效率', icon: Factory },
-  { to: '/strategic-sim', label: '战略模拟', icon: TrendingUp },
+const NAV = [
+  {
+    group: '用户前端',
+    badge: { label: '运行时', cls: 'b-blue' },
+    items: [
+      { to: '/',                label: '运行时仪表盘',   dot: 's-on' },
+      { to: '/auto-annotation', label: '自动标注监控',   dot: 's-on' },
+      { to: '/hitl',            label: '提示标注工作区', dot: 's-mid' },
+    ],
+  },
+  {
+    group: '专家 / 管理员',
+    badge: { label: '知识训练', cls: 'b-amber' },
+    items: [
+      { to: '/public-knowledge', label: '公开知识标注', dot: 's-off' },
+      { to: '/expert-knowledge', label: '专家知识采集', dot: 's-off' },
+      { to: '/doc-annotation',   label: '企业文档标注', dot: 's-off' },
+    ],
+  },
+  {
+    group: '系统监控',
+    items: [
+      { to: '/kb-status', label: '知识库状态', dot: 's-on' },
+    ],
+  },
 ]
 
-export default function Sidebar({ className = '', onNavigate }) {
+export default function Sidebar() {
+  const location = useLocation()
+
   return (
-    <aside className={`w-56 flex-shrink-0 bg-surface border-r border-gray-700 flex flex-col ${className}`}>
+    <aside style={{
+      width: 200,
+      background: 'var(--bg)',
+      borderRight: '0.5px solid var(--b1)',
+      display: 'flex',
+      flexDirection: 'column',
+      flexShrink: 0,
+      height: '100vh',
+      overflowY: 'auto',
+      position: 'sticky',
+      top: 0,
+    }}>
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-700">
-        <div className="flex items-center gap-2.5">
-          <Activity className="w-6 h-6 text-blue-400" />
-          <div>
-            <p className="text-white font-bold text-base leading-none">RelOS</p>
-            <p className="text-gray-500 text-xs mt-0.5">关系操作系统</p>
-          </div>
-        </div>
+      <div style={{ padding: '13px 14px 8px', borderBottom: '0.5px solid var(--b1)' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>RelOS 知识工作台</div>
+        <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>v2.0 · Sprint 3</div>
       </div>
 
-      {/* 导航 */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={() => onNavigate?.()}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`
-            }
-          >
-            <Icon className="w-4 h-4 flex-shrink-0" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      {NAV.map((grp) => (
+        <div key={grp.group}>
+          <div style={{
+            padding: '6px 14px 3px',
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--t3)',
+            letterSpacing: '0.06em',
+            marginTop: 4,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}>
+            {grp.group}
+            {grp.badge && (
+              <span className={`badge ${grp.badge.cls}`} style={{ fontSize: 9 }}>
+                {grp.badge.label}
+              </span>
+            )}
+          </div>
+          {grp.items.map(({ to, label, dot }) => {
+            const isActive = to === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(to)
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  width: '100%',
+                  padding: '7px 13px',
+                  borderLeft: `2.5px solid ${isActive ? 'var(--blue)' : 'transparent'}`,
+                  background: isActive ? 'var(--bg2)' : 'none',
+                  fontSize: 12,
+                  color: isActive ? 'var(--t1)' : 'var(--t2)',
+                  fontWeight: isActive ? 500 : 400,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <span className={`sdot ${dot}`} />
+                {label}
+              </NavLink>
+            )
+          })}
+        </div>
+      ))}
 
-      {/* 底部版本信息 */}
-      <div className="px-5 py-4 border-t border-gray-700">
-        <p className="text-xs text-gray-600">MVP v0.3.0</p>
-        <p className="text-xs text-gray-600">Sprint 3 · 2026-03</p>
+      <div style={{ flex: 1 }} />
+      <div style={{
+        padding: '10px 14px',
+        fontSize: 10,
+        color: 'var(--t3)',
+        borderTop: '0.5px solid var(--b1)',
+      }}>
+        v2 · 2026.03 · MVP Sprint 3
       </div>
     </aside>
   )
