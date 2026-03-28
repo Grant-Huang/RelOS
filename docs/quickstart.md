@@ -229,14 +229,20 @@ curl http://localhost:8000/v1/health
 # Windows
 pip install -e ".[dev]"
 
-# macOS / Linux
+# macOS / Linux（Homebrew Python 常无 pip/python 命令，任选其一）
 pip3 install -e ".[dev]"
+# 或（推荐，与具体 pip 可执行文件名无关）
+python3 -m pip install -e ".[dev]"
 ```
 
 注入 MVP 演示数据：
 
 ```bash
+# Windows
 python scripts/seed_neo4j.py
+
+# macOS / Linux（若提示 command not found: python，请用 python3）
+python3 scripts/seed_neo4j.py
 ```
 
 成功后会看到：
@@ -269,7 +275,11 @@ python scripts/seed_neo4j.py
 ## 第六步：运行演示
 
 ```bash
+# Windows
 python scripts/simulate_alarm.py
+
+# macOS / Linux（无 python 命令时）
+python3 scripts/simulate_alarm.py
 ```
 
 成功后会看到完整的告警分析流程：
@@ -312,10 +322,27 @@ python scripts/simulate_alarm.py
 |------|------|---------|
 | http://localhost:8000/v1/health | API 健康检查 | `{"status":"ok"}` |
 | http://localhost:8000/docs | 交互式 API 文档 | Swagger UI 界面 |
-| http://localhost:7474 | Neo4j 图数据库界面 | Neo4j Browser 界面 |
+| http://localhost:3000 | Web 知识工作台（需执行下方「可选」步骤） | RelOS 运行时/知识训练界面 |
+| http://localhost:7474 | Neo4j 图数据库界面 | Neo4j Browser（**不是**业务首页，见 Q8） |
 | http://localhost:8000/v1/metrics | 图谱统计数据 | 节点和关系数量 |
 
-> Neo4j Browser 登录：用户名 `neo4j`，密码 `relos_dev`
+> Neo4j Browser 登录：用户名 `neo4j`，密码 `relos_dev`（若在 `.env` 中设置了 `NEO4J_PASSWORD`，则使用该密码）
+
+---
+
+## 可选：启动 Web 知识工作台
+
+> 适合需要图形界面操作 **运行时仪表盘、提示标注、三层知识训练** 的用户（详见 [用户操作手册 — Web 知识工作台](user-manual.md)）。
+
+**前置**：已安装 **Node.js 18+**（与 `frontend/package.json` 一致即可）。
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+终端会打印本地访问地址（一般为 **http://localhost:3000**）。根路径会自动进入 **运行时仪表盘**；侧栏可切换到「知识训练」「系统监控」等分组。
 
 ---
 
@@ -417,6 +444,17 @@ kill -9 <PID>
 netstat -ano | findstr :8000
 taskkill /PID <PID> /F
 ```
+
+---
+
+### Q8：打开浏览器却是 Neo4j「Connect to instance」，是不是装错了？
+
+**不是。** `http://localhost:7474` 是 **Neo4j Browser**（图数据库管理工具），本来就会要求连接 **Bolt**（如 `localhost:7687`）并输入数据库账号密码。
+
+- **RelOS 业务界面**：请用 **http://localhost:8000/docs**（API）或启动前端后的 **http://localhost:3000**（工作台）。
+- **Neo4j** 始终在后台为 API 提供图存储；只有排错或看图谱时才需要打开 7474。
+
+更多说明见 [用户操作手册 §1.1](user-manual.md)。
 
 ---
 

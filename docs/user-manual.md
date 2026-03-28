@@ -1,8 +1,8 @@
 # RelOS 系统使用操作手册
 
-> **版本**：v0.4.0（Sprint 4）
-> **适用角色**：维修工程师、设备管理员、IT 集成人员
-> **更新日期**：2026-03-25（补充 `knowledge_phase` / `phase_weight` 口径）
+> **版本**：v0.5.0（Sprint 4+）
+> **适用角色**：维修工程师、设备管理员、专家/知识管理员、IT 集成人员
+> **更新日期**：2026-03-28（补充 Web 知识工作台、部署入口说明）
 
 ---
 
@@ -14,6 +14,8 @@
 - **第二部分：使用场景** — 在实际工作中怎么用，步骤是什么
 
 **系统核心价值**：RelOS 将老工程师的维修经验和历史故障数据转化为结构化知识，帮助任何维修人员快速找到设备故障根因，减少停机时间。
+
+**相关文档**：[快速上手指南](quickstart.md)（安装与首次启动）、[部署说明](deployment.md)（端口与安全）、[用户体验与信息架构](ux-flow.md)（含工作台路由表）、[设计计划](design-plan.md)（界面与组件规划）。
 
 ---
 
@@ -32,6 +34,22 @@ RelOS 查询历史关系知识库
       ↓
 工程师确认 → 知识库自动优化（数据飞轮）
 ```
+
+### 1.1 应该打开哪个网址？（避免与 Neo4j 混淆）
+
+部署后常见疑问：**浏览器里出现「Connect to instance」、要求输入 Neo4j 密码**——那是 **Neo4j Browser**（图数据库自带的管理界面），**不是** RelOS 的业务首页。
+
+| 地址 | 是什么 | 谁在用 |
+|------|--------|--------|
+| `http://localhost:8000/docs` | RelOS **API 文档（Swagger）** | 开发/集成、联调接口 |
+| `http://localhost:8000/v1/health` | API **健康检查** | 运维确认后端已启动 |
+| `http://localhost:3000`（默认） | **Web 知识工作台**（需本地启动前端，见 [quickstart](quickstart.md)） | 操作员、专家/管理员日常操作 |
+| `http://localhost:7474` | **Neo4j Browser**（查库、跑 Cypher） | 开发/DBA；可选使用 |
+
+- **Neo4j** 是后台存储「关系图谱」的数据库；用户名一般为 `neo4j`，本地 Docker 默认密码见 `docker-compose.yml`（未改 `.env` 时常为 `relos_dev`）。
+- **日常业务**：优先打开 **API** 或 **前端工作台**；仅在需要看图谱结构、执行图查询时再打开 7474。
+
+---
 
 ## 2. 核心概念
 
@@ -79,6 +97,37 @@ RelOS 查询历史关系知识库
 - **关闭时（生产就绪）**：系统可以真实触发操作
 
 > 建议先用 Shadow Mode 运行 2-4 周，验证推荐准确率 > 70% 后再关闭。
+
+### 2.4 Web 知识工作台（用户前端 + 专家/管理员）
+
+仓库内 **MVP 前端** 位于 `frontend/`，信息架构与单页原型 [`relos_workbench_v2.html`](relos_workbench_v2.html) 对齐，支持 **浅色 / 深色**主题（顶栏切换，本地持久化）。默认落地页为 **运行时仪表盘**（操作员视角）。
+
+**侧栏分组与主要路径**：
+
+| 分组 | 用途 | 典型路径 |
+|------|------|----------|
+| **用户前端 · 运行时** | 今日有事、自动行为透明、人机协同标注 | `/runtime/dashboard`、`/runtime/automation`、`/runtime/prompt` |
+| **专家/管理员 · 知识训练** | 三层知识来源分轨，权威性可见 | `/knowledge/public`、`/knowledge/expert`、`/knowledge/documents` |
+| **系统监控** | 图谱与文档摄取摘要 | `/system/kb-status` |
+| **分析与演示** | 告警流式分析等原有演示页 | `/alarm` 等 |
+
+**三层知识与置信度上限（界面「权威性条」与文档一致）**：
+
+| 层 | 路径 | 工作流要点 | 置信度上限（产品约定） |
+|----|------|------------|------------------------|
+| 层 1 公开知识 | `/knowledge/public` | 粘贴 → AI 预标注（可占位）→ 人工审核后入图 | LLM 预标注 **0.85**，`knowledge_phase=bootstrap` |
+| 层 2 专家知识 | `/knowledge/expert` | 访谈微卡片 + 结构化向导，隐性经验显式化 | 专家确认后可达 **1.0**，`knowledge_phase=interview` |
+| 层 3 企业文档 | `/knowledge/documents` | 上传 → 候选关系 → **批量**批准/拒绝 → 提交图谱 | LLM 预标注 **0.85**，`knowledge_phase=pretrain` |
+
+**提示标注工作区**（`/runtime/prompt`）：面向置信度 **0.50–0.79** 的待审关系，操作走 `POST /v1/relations/{id}/feedback`（`engineer_id`、`confirmed`），与关系核心（Relation Core）联动；「不确定」等行为以实现为准（可仅前端移出队列而不调用接口）。
+
+**本地启动前端**（需已安装 Node.js）：
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+浏览器访问终端提示的本地地址（一般为 `http://localhost:3000`）。详细步骤见 [quickstart.md](quickstart.md)。
 
 ---
 
@@ -510,6 +559,10 @@ curl http://localhost:8000/v1/metrics
 
 **步骤 1**：查看待审核队列
 
+**方式 A（推荐，已部署前端时）**：浏览器打开工作台 **「提示标注工作区」**（`/runtime/prompt`）。界面默认聚焦置信度 **0.50–0.79** 区间，与「提示标注」产品定义一致；全量待审列表仍以 API 为准。
+
+**方式 B（API）**：
+
 ```bash
 curl http://localhost:8000/v1/relations/pending-review?limit=20
 ```
@@ -629,6 +682,7 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 |------|---|
 | 基础 URL | `http://localhost:8000/v1` |
 | 接口文档 | `http://localhost:8000/docs` |
+| Web 工作台（本地） | `frontend/` 执行 `npm run dev`，默认 `http://localhost:3000` |
 | 数据格式 | JSON |
 | 编码 | UTF-8 |
 
@@ -643,6 +697,8 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 | `/relations/{id}/feedback` | POST | 提交工程师反馈 |
 | `/relations/subgraph` | POST | 查询设备子图 |
 | `/relations/pending-review` | GET | 待审核队列 |
+| `/telemetry/events` | GET | 埋点/事件列表（自动标注监控等） |
+| `/documents/*` | 多种 | 企业文档上传、澄清、单条标注、提交图谱 |
 | `/decisions/analyze-alarm` | POST | 告警根因分析 |
 | `/decisions/execute-action` | POST | 执行操作任务 |
 | `/decisions/action/{id}` | GET | 查询操作状态 |

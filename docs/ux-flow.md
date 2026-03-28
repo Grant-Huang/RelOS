@@ -323,6 +323,8 @@ RelOS 前端（AgentNexus 消费，或独立 Web App）
 
 **三层权威性**：各知识训练页顶栏使用 `LayerAuthorityBar`（层编号、置信度上限、`knowledge_phase` 文案），与 [`architecture.md`](architecture.md) / 数据模型一致。
 
+**访问入口（易混淆点）**：业务侧应引导用户打开 **API 文档 / 集成应用** 或 **`frontend` 本地开发（常见 `http://localhost:3000`）**。**`http://localhost:7474` 为 Neo4j Browser**（图数据库管理工具，需 `neo4j` 数据库账号密码），不是 RelOS 工作台。详见 [用户操作手册 §1.1](user-manual.md)。
+
 ---
 
 ## 6. 无障碍与工业场景适配
