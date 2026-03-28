@@ -1,15 +1,13 @@
 /**
- * StrategicSim — 战略决策模拟（场景 S-12）
- * 同时展示资源配置优化（S-11）
+ * 战略扩产模拟 + 资源配置（S-12 / S-11）— 严格对齐 relos_workbench v2：card / stat / rrow / cbar / btn / ann-src / upz
  */
 import { useState, useCallback } from 'react'
-import { TrendingUp, AlertTriangle, CheckCircle, Zap } from 'lucide-react'
+import { TrendingUp, Zap, CheckCircle } from 'lucide-react'
 import { runStrategicSimulation, getResourceOptimization } from '../api/client'
 import ConfidenceBar from '../components/ConfidenceBar'
 
-const RISK_COLORS = { high: '#DC2626', medium: '#EA580C', low: '#16A34A' }
+const RISK_LABEL = { high: '高风险', medium: '中等风险', low: '可接受' }
 
-// mock 资源配置数据
 const MOCK_RESOURCES = {
   recommendations: [
     { rank: 1, resource_name: '设备维护团队', roi_pct: 35, investment_rmb: 360000, impact_description: '可减少交付延误 41%' },
@@ -19,17 +17,23 @@ const MOCK_RESOURCES = {
   priority_action: '优先投入：设备维护团队（ROI 最高，预计 8 个月回本）',
 }
 
-function RiskChangeRow({ label, change, color }) {
+function RiskChangeRow({ label, change, last }) {
   const isRise = change > 0
+  const color = isRise ? 'var(--red)' : 'var(--green)'
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-gray-800 last:border-0">
-      <span className="text-sm text-gray-400">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-lg font-bold tabular-nums" style={{ color }}>
-          {isRise ? '+' : ''}{change.toFixed(1)}%
-        </span>
-        <span className="text-lg" style={{ color }}>{isRise ? '↑' : '↓'}</span>
-      </div>
+    <div
+      className="rrow"
+      style={{
+        justifyContent: 'space-between',
+        borderBottom: last ? 'none' : undefined,
+        marginBottom: last ? 0 : undefined,
+      }}
+    >
+      <span className="muted">{label}</span>
+      <span className="tabular-nums" style={{ fontWeight: 600, fontSize: 13, color }}>
+        {isRise ? '+' : ''}
+        {change.toFixed(1)}% {isRise ? '↑' : '↓'}
+      </span>
     </div>
   )
 }
@@ -47,7 +51,6 @@ export default function StrategicSim() {
       const data = await runStrategicSimulation(expansion)
       setSimResult(data)
     } catch {
-      // mock 降级
       setSimResult({
         expansion_pct: expansion,
         delivery_risk_change_pct: +(expansion * 0.9).toFixed(1),
@@ -84,190 +87,208 @@ export default function StrategicSim() {
     }
   }
 
-  const riskColor = RISK_COLORS[simResult?.risk_level] || '#6B7280'
-  const riskText = simResult?.risk_level === 'high' ? '高风险' : simResult?.risk_level === 'medium' ? '中等风险' : '可接受'
+  const riskLevel = simResult?.risk_level || 'low'
+  const riskBadge = riskLevel === 'high' ? 'b-red' : riskLevel === 'medium' ? 'b-amber' : 'b-green'
+  const riskColor = riskLevel === 'high' ? 'var(--red)' : riskLevel === 'medium' ? 'var(--amber)' : 'var(--green)'
+  const riskBg = riskLevel === 'high' ? 'var(--red-l)' : riskLevel === 'medium' ? 'var(--amber-l)' : 'var(--green-l)'
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      {/* 页头 */}
-      <div className="flex items-center gap-3 mb-8">
-        <TrendingUp className="w-6 h-6 text-blue-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">高层决策分析</h1>
-          <p className="text-gray-500 text-sm">场景 S-11/12 · 资源配置优化 + 战略扩产模拟</p>
-        </div>
-      </div>
+    <div className="relos-page">
+      <h2>
+        战略模拟与资源配置 <span className="badge b-teal">S-11 / S-12</span>
+      </h2>
+      <div className="muted mb12">资源配置优化 · 战略扩产影响推演（布局与知识库状态页 stat / rrow 一致）</div>
 
-      <div className="grid grid-cols-2 gap-8">
-        {/* 左：战略模拟（S-12） */}
+      <div className="g2">
         <div>
-          <h2 className="text-lg font-semibold text-white mb-4">扩产影响模拟（S-12）</h2>
+          <h3>扩产影响模拟（S-12）</h3>
 
-          {/* 滑条 */}
-          <div className="bg-surface rounded-xl border border-gray-700 p-6 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-400">扩产比例</p>
-              <span className="text-3xl font-bold text-blue-400 tabular-nums">+{expansion}%</span>
+          <div className="card mb12">
+            <div className="rrow" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                扩产比例
+              </span>
+              <span className="tabular-nums stat-v" style={{ marginBottom: 0, fontSize: 22, color: 'var(--blue)' }}>
+                +{expansion}%
+              </span>
             </div>
             <input
               type="range"
-              min="5" max="60" step="5"
+              min={5}
+              max={60}
+              step={5}
               value={expansion}
               onChange={(e) => setExpansion(Number(e.target.value))}
-              className="w-full accent-blue-500 mb-2"
+              style={{ width: '100%' }}
             />
-            <div className="flex justify-between text-xs text-gray-600">
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>
               <span>保守 +5%</span>
               <span>激进 +60%</span>
             </div>
 
-            {/* 预警色阶 */}
-            <div className="mt-4 flex gap-1 text-xs">
-              {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map(v => (
+            <div style={{ display: 'flex', gap: 2, marginTop: 12 }}>
+              {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map((v) => (
                 <div
                   key={v}
-                  className={`flex-1 h-1.5 rounded-full transition-all ${
-                    v <= expansion
-                      ? v <= 15 ? 'bg-confidence-high' : v <= 25 ? 'bg-confidence-mid' : 'bg-confidence-low'
-                      : 'bg-gray-800'
-                  }`}
+                  style={{
+                    flex: 1,
+                    height: 5,
+                    borderRadius: 3,
+                    background:
+                      v <= expansion
+                        ? v <= 15
+                          ? 'var(--green)'
+                          : v <= 25
+                            ? 'var(--amber)'
+                            : 'var(--red)'
+                        : 'var(--b1)',
+                  }}
                 />
               ))}
             </div>
 
             <button
+              type="button"
+              className="btn btn-p mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
               onClick={runSim}
               disabled={loading}
-              className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-colors font-semibold text-white"
             >
               {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  模拟中...
-                </>
+                <>模拟中…</>
               ) : (
                 <>
-                  <Zap className="w-4 h-4" />
+                  <Zap style={{ width: 16, height: 16 }} />
                   运行模拟
                 </>
               )}
             </button>
           </div>
 
-          {/* 模拟结果 */}
           {simResult && (
-            <div className="space-y-4">
-              {/* 综合风险等级 */}
-              <div
-                className="rounded-xl border px-6 py-4 flex items-center justify-between"
-                style={{ borderColor: riskColor + '66', backgroundColor: riskColor + '11' }}
-              >
-                <div>
-                  <p className="text-sm text-gray-400">综合风险评级</p>
-                  <p className="text-white text-sm mt-1">扩产 +{simResult.expansion_pct}% 的预期影响</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="g2 mb10">
+                <div className="stat" style={{ borderLeft: '3px solid var(--red)' }}>
+                  <div className="stat-v" style={{ color: 'var(--red)', fontSize: 18 }}>
+                    +{simResult.delivery_risk_change_pct?.toFixed(1)}%
+                  </div>
+                  <div className="stat-l">交付风险</div>
                 </div>
-                <span className="text-2xl font-bold" style={{ color: riskColor }}>{riskText}</span>
+                <div className="stat" style={{ borderLeft: '3px solid var(--amber)' }}>
+                  <div className="stat-v" style={{ color: 'var(--amber)', fontSize: 18 }}>
+                    +{simResult.failure_rate_change_pct?.toFixed(1)}%
+                  </div>
+                  <div className="stat-l">设备故障率</div>
+                </div>
+                <div className="stat" style={{ borderLeft: '3px solid var(--amber)' }}>
+                  <div className="stat-v" style={{ color: 'var(--amber)', fontSize: 18 }}>
+                    +{simResult.quality_risk_change_pct?.toFixed(1)}%
+                  </div>
+                  <div className="stat-l">质量缺陷率</div>
+                </div>
+                <div className="stat" style={{ borderLeft: `3px solid ${riskColor}`, background: riskBg }}>
+                  <div className="stat-v" style={{ color: riskColor, fontSize: 15 }}>
+                    <span className={`badge ${riskBadge}`} style={{ verticalAlign: 'middle' }}>
+                      {RISK_LABEL[riskLevel]}
+                    </span>
+                  </div>
+                  <div className="stat-l">综合评级 · +{simResult.expansion_pct}%</div>
+                </div>
               </div>
 
-              {/* 风险变化数据 */}
-              <div className="bg-surface rounded-xl border border-gray-700 px-5 py-4">
-                <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">关键风险指标变化</p>
-                <RiskChangeRow label="交付风险" change={simResult.delivery_risk_change_pct} color="#DC2626" />
-                <RiskChangeRow label="设备故障率" change={simResult.failure_rate_change_pct} color="#EA580C" />
-                <RiskChangeRow label="质量缺陷率" change={simResult.quality_risk_change_pct} color="#EA580C" />
+              <div className="card">
+                <h3 style={{ marginBottom: 8 }}>关键风险指标变化</h3>
+                <RiskChangeRow label="交付风险" change={simResult.delivery_risk_change_pct} />
+                <RiskChangeRow label="设备故障率" change={simResult.failure_rate_change_pct} />
+                <RiskChangeRow label="质量缺陷率" change={simResult.quality_risk_change_pct} last />
               </div>
 
-              {/* 因果链 */}
-              <div className="bg-surface rounded-xl border border-gray-700 px-5 py-4">
-                <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">影响路径</p>
-                <ol className="space-y-2">
+              <div className="card">
+                <h3 style={{ marginBottom: 8 }}>影响路径</h3>
+                <div>
                   {simResult.causal_chain?.map((step, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-blue-900 border border-blue-700 text-xs text-blue-400 font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                        {i + 1}
-                      </span>
-                      <span className="text-sm text-gray-300">{step}</span>
-                    </li>
+                    <div key={i} className="tl-item">
+                      <span className="tl-dot" />
+                      <span style={{ fontSize: 12, color: 'var(--t1)', lineHeight: 1.5 }}>{step}</span>
+                    </div>
                   ))}
-                </ol>
+                </div>
               </div>
 
-              {/* 建议 */}
               {simResult.recommendations?.length > 0 && (
-                <div className="bg-surface rounded-xl border border-gray-700 px-5 py-4">
-                  <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">扩产前建议</p>
-                  <ul className="space-y-2">
-                    {simResult.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-300">{rec}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div className="card">
+                  <h3 style={{ marginBottom: 8 }}>扩产前建议</h3>
+                  <div className="ann-src" style={{ marginBottom: 0 }}>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--t1)' }}>
+                      {simResult.recommendations.map((rec, i) => (
+                        <li key={i} style={{ marginBottom: 6 }}>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* 右：资源配置（S-11） */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">资源配置优化（S-11）</h2>
+          <div className="rrow" style={{ justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap' }}>
+            <h3 style={{ marginBottom: 0 }}>资源配置优化（S-11）</h3>
             {!resources && (
               <button
+                type="button"
+                className="btn btn-p btn-sm disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={loadResources}
                 disabled={resLoading}
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
               >
-                {resLoading ? '加载中...' : '加载建议'}
+                {resLoading ? '加载中…' : '加载建议'}
               </button>
             )}
           </div>
 
           {!resources && !resLoading && (
-            <div className="bg-surface rounded-xl border border-dashed border-gray-700 p-8 text-center">
-              <TrendingUp className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">点击"加载建议"获取资源配置优化方案</p>
-              <button
-                onClick={loadResources}
-                className="mt-4 px-4 py-2 rounded-lg bg-blue-600/30 text-blue-400 text-sm hover:bg-blue-600/50 transition-colors border border-blue-800"
-              >
-                获取建议
+            <div className="upz mb12">
+              <TrendingUp style={{ width: 28, height: 28, margin: '0 auto 8px', color: 'var(--t3)' }} />
+              <p className="muted" style={{ marginBottom: 8 }}>
+                点击下方按钮加载资源配置优化方案
+              </p>
+              <button type="button" className="btn btn-p btn-sm justify-center" onClick={loadResources}>
+                加载建议
               </button>
             </div>
           )}
 
-          {resLoading && (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => <div key={i} className="bg-surface rounded-xl border border-gray-700 h-28 animate-pulse" />)}
-            </div>
-          )}
+          {resLoading && <p className="muted">加载中…</p>}
 
           {resources && (
-            <div className="space-y-4">
-              {resources.recommendations?.map((rec, i) => (
-                <div key={i} className="bg-surface rounded-xl border border-gray-700 p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="w-6 h-6 rounded-full bg-blue-900 border border-blue-700 text-xs text-blue-400 font-bold flex items-center justify-center">
-                          {rec.rank}
-                        </span>
-                        <p className="font-semibold text-white">{rec.resource_name}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {resources.recommendations?.map((rec) => (
+                <div key={rec.rank} className="card">
+                  <div className="rrow" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                        <span className="badge b-purple">{rec.rank}</span>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>{rec.resource_name}</span>
                       </div>
-                      <p className="text-sm text-gray-400">{rec.impact_description}</p>
+                      <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+                        {rec.impact_description}
+                      </p>
                     </div>
-                    <div className="text-right flex-shrink-0 ml-4">
-                      <p className="text-2xl font-bold text-confidence-high tabular-nums">{rec.roi_pct}%</p>
-                      <p className="text-xs text-gray-500">ROI</p>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <p className="tabular-nums stat-v" style={{ marginBottom: 0, fontSize: 20, color: 'var(--green)' }}>
+                        {rec.roi_pct}%
+                      </p>
+                      <p className="muted stat-l" style={{ margin: 0 }}>
+                        ROI
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">
+                  <div className="rrow" style={{ justifyContent: 'space-between', marginBottom: 0 }}>
+                    <span className="muted" style={{ fontSize: 11 }}>
                       投入：¥{(rec.investment_rmb / 10000).toFixed(0)} 万
                     </span>
-                    <div className="w-32">
+                    <div style={{ width: 'min(200px, 55%)' }}>
                       <ConfidenceBar value={rec.roi_pct / 100} size="sm" showLabel={false} />
                     </div>
                   </div>
@@ -275,9 +296,11 @@ export default function StrategicSim() {
               ))}
 
               {resources.priority_action && (
-                <div className="bg-blue-900/20 border border-blue-800 rounded-xl px-5 py-4 flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-blue-300">{resources.priority_action}</p>
+                <div className="card" style={{ background: 'var(--blue-l)', borderColor: 'var(--blue)' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <CheckCircle style={{ width: 18, height: 18, flexShrink: 0, color: 'var(--blue)' }} />
+                    <p style={{ fontSize: 12, color: 'var(--blue-ink)', margin: 0 }}>{resources.priority_action}</p>
+                  </div>
                 </div>
               )}
             </div>

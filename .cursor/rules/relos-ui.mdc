@@ -1,0 +1,12 @@
+---
+description: RelOS 前端浅色/深色主题与组件类名约定
+globs: "**/frontend/**/*.{jsx,css}"
+---
+
+# RelOS 前端 UI
+
+- **主题令牌**：`frontend/src/index.css` 中 `html.theme-light` / `html.theme-dark` 的 `--*` 变量是唯一配色来源；新页面禁止硬编码与主题冲突的 `#rgb` / `gray-*` 大面积背景。
+- **页面骨架**：根容器用 `relos-page`；区块用 `relos-panel`、`relos-field`、`relos-subpanel`；通知用 `relos-notif`。
+- **按钮**：主操作 `btn btn-p`（全宽主 CTA 加 `w-full justify-center`），成功 `btn btn-ok`，危险 `btn btn-no`，次要 `btn btn-sm`；卡片内全宽展开条 `btn-row-expand`；图标按钮 `relos-btn-icon`。
+- **标签/徽章**：`badge`、`badge-gray`；芯片 `chip`、`chip-a|g|r|p|t`；统计 `stat` + `stat-v` + `stat-l`。
+- **禁止**：`wb-*`、`page-h2`、`stat-card` / `stat-value` / `stat-label`、`divider-v2`、`confidence-bar-fill` 等已删除类名（见 `index.css` 文件头注释）。

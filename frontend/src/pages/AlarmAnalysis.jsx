@@ -1,9 +1,8 @@
 /**
- * AlarmAnalysis — 告警根因分析页（场景 S-01）
- * 工程师输入告警码 → 获取 AI 根因推荐 → 确认/否定反馈
+ * 告警根因分析（场景 S-01）— 使用全局 .relos-page / .card / .btn / .muted
  */
 import { useState } from 'react'
-import { Bell, Search, ChevronRight } from 'lucide-react'
+import { Search } from 'lucide-react'
 import AlarmRootCauseCard from '../components/AlarmRootCauseCard'
 import { analyzeAlarmStream, postTelemetryEvent, streamAnswer } from '../api/client'
 
@@ -52,10 +51,10 @@ export default function AlarmAnalysis() {
     try {
       await analyzeAlarmStream(
         {
-        alarm_id: `alarm-${form.alarm_code}`,
-        device_id: form.device_id,
-        alarm_code: form.alarm_code,
-        alarm_description: form.alarm_description,
+          alarm_id: `alarm-${form.alarm_code}`,
+          device_id: form.device_id,
+          alarm_code: form.alarm_code,
+          alarm_description: form.alarm_description,
         },
         (evt, data) => {
           if (evt === 'summary') {
@@ -134,149 +133,160 @@ export default function AlarmAnalysis() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      {/* 页头 */}
-      <div className="flex items-center gap-3 mb-8">
-        <Bell className="w-6 h-6 text-red-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">告警根因分析</h1>
-          <p className="text-gray-500 text-sm">场景 S-01 · 输入告警信息，获取 AI 根因推荐</p>
-        </div>
-      </div>
+    <div className="relos-page">
+      <h2>
+        告警根因分析 <span className="badge b-red">场景 S-01</span>
+      </h2>
+      <div className="muted mb12">输入告警信息，获取 AI 根因推荐与流式解释</div>
 
-      {/* 快速选择告警 */}
-      <div className="mb-6">
-        <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">演示告警 · 快速选择</p>
-        <div className="grid grid-cols-3 gap-3">
+      <div className="card mb12">
+        <h3>演示告警 · 快速选择</h3>
+        <div className="muted" style={{ marginBottom: 8, fontSize: 11 }}>
+          与「专家知识 · 选择访谈场景」相同的卡片选中态
+        </div>
+        <div className="g2" style={{ marginTop: 8 }}>
           {QUICK_ALARMS.map((q) => (
-            <button
+            <div
               key={q.code}
+              className="card"
+              role="button"
+              tabIndex={0}
               onClick={() => handleQuick(q)}
-              className={`text-left rounded-lg border px-4 py-3 transition-all ${
-                form.alarm_code === q.code
-                  ? 'border-blue-600 bg-blue-900/30'
-                  : 'border-gray-700 bg-surface hover:border-gray-500'
-              }`}
+              onKeyDown={(e) => e.key === 'Enter' && handleQuick(q)}
+              style={{
+                cursor: 'pointer',
+                marginBottom: 0,
+                padding: '10px 12px',
+                border: form.alarm_code === q.code ? '1.5px solid var(--blue)' : '0.5px solid var(--b1)',
+                background: form.alarm_code === q.code ? 'var(--blue-l)' : 'var(--bg)',
+                transition: 'border-color 0.15s',
+              }}
             >
-              <p className="font-mono text-sm font-semibold text-white">{q.code}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{q.desc}</p>
-              <p className="text-xs text-gray-600 mt-0.5">{q.name}</p>
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="badge b-red">{q.code}</span>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  {q.desc}
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 10, marginTop: 6 }}>
+                {q.name}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* 输入表单 */}
-      <div className="bg-surface rounded-xl border border-gray-700 p-6 mb-6">
-        <p className="text-sm font-medium text-gray-400 mb-4">告警信息</p>
-        <div className="grid grid-cols-2 gap-4">
+      <div className="card mb12">
+        <h3>告警信息</h3>
+        <div className="g2 mt8">
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5">告警码 *</label>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+              告警码 *
+            </div>
             <input
               type="text"
               value={form.alarm_code}
               onChange={(e) => setForm({ ...form, alarm_code: e.target.value })}
               placeholder="如 VIB-001"
-              className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5">设备 ID *</label>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+              设备 ID *
+            </div>
             <input
               type="text"
               value={form.device_id}
               onChange={(e) => setForm({ ...form, device_id: e.target.value })}
               placeholder="如 device-M1"
-              className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5">设备名称</label>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+              设备名称
+            </div>
             <input
               type="text"
               value={form.device_name}
               onChange={(e) => setForm({ ...form, device_name: e.target.value })}
               placeholder="如 1号机（注塑机）"
-              className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5">告警描述</label>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+              告警描述
+            </div>
             <input
               type="text"
               value={form.alarm_description}
               onChange={(e) => setForm({ ...form, alarm_description: e.target.value })}
               placeholder="如 振动超限"
-              className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
             />
           </div>
         </div>
 
         <button
+          type="button"
+          className="btn btn-p mt-3 w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
           onClick={handleAnalyze}
           disabled={loading || !form.alarm_code || !form.device_id}
-          className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold text-white"
         >
           {loading ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              正在分析关系图谱...
-            </>
+            <>正在分析关系图谱…</>
           ) : (
             <>
-              <Search className="w-4 h-4" />
+              <Search style={{ width: 16, height: 16 }} />
               分析告警根因
             </>
           )}
         </button>
       </div>
 
-      {/* 错误提示 */}
       {error && (
-        <div className="mb-6 bg-red-900/30 border border-red-800 rounded-xl px-5 py-4">
-          <p className="text-red-300 font-medium">分析失败</p>
-          <p className="text-red-500 text-sm mt-1">{error}</p>
+        <div className="card mb12" style={{ borderColor: 'var(--red)', background: 'var(--red-l)' }}>
+          <p style={{ fontWeight: 500, color: 'var(--red)', marginBottom: 4 }}>分析失败</p>
+          <p className="muted" style={{ color: 'var(--red)', margin: 0 }}>
+            {error}
+          </p>
         </div>
       )}
 
-      {/* 结果卡片 */}
       {resultData && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <ChevronRight className="w-4 h-4 text-gray-500" />
-            <p className="text-sm text-gray-400">分析结果</p>
+        <div className="mb12">
+          <h3>分析结果</h3>
+          <div style={{ marginTop: 10 }}>
+            <AlarmRootCauseCard
+              alarmCode={form.alarm_code}
+              deviceName={form.device_name || form.device_id}
+              recommendedCause={resultData.recommendedCause}
+              confidence={resultData.confidence}
+              engineUsed={resultData.engineUsed}
+              shadowMode={resultData.shadowMode}
+              supportingRelations={resultData.supportingRelations}
+              onConfirm={() => {}}
+              onReject={() => {}}
+            />
           </div>
-          <AlarmRootCauseCard
-            alarmCode={form.alarm_code}
-            deviceName={form.device_name || form.device_id}
-            recommendedCause={resultData.recommendedCause}
-            confidence={resultData.confidence}
-            engineUsed={resultData.engineUsed}
-            shadowMode={resultData.shadowMode}
-            supportingRelations={resultData.supportingRelations}
-            onConfirm={() => console.log('confirmed')}
-            onReject={() => console.log('rejected')}
-          />
 
-          {/* 流式问答（MVP：单问单答） */}
           {stream.question && (
-            <div className="mt-4 bg-surface rounded-xl border border-gray-700 p-5">
-              <p className="text-xs text-gray-500 uppercase tracking-wider">流式澄清问题</p>
-              <p className="text-white font-medium mt-2">{stream.question.prompt}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(stream.question.options || []).map((opt) => (
+            <div className="qcard" style={{ marginTop: 12 }}>
+              <div className="q-num">流式澄清问题</div>
+              <div className="q-text">{stream.question.prompt}</div>
+              <div className="ann-actions" style={{ marginTop: 0 }}>
+                {(stream.question.options || []).map((opt, i) => (
                   <button
                     key={opt.id}
+                    type="button"
+                    className={i === 0 ? 'btn btn-p btn-sm' : 'btn btn-sm'}
                     disabled={answering}
                     onClick={() => handleAnswer(opt.id)}
-                    className="px-3 py-2 rounded-lg border border-gray-700 bg-bg text-sm text-gray-200 hover:border-gray-500 disabled:opacity-40"
                   >
                     {opt.label}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-600 mt-3">
-                trace：<span className="font-mono">{stream.traceId || '—'}</span>
+              <p className="muted" style={{ fontSize: 10, marginTop: 10, marginBottom: 0 }}>
+                trace：<span style={{ fontFamily: 'ui-monospace, monospace' }}>{stream.traceId || '—'}</span>
               </p>
             </div>
           )}
