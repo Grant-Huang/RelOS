@@ -1,22 +1,24 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import AlarmAnalysis from './pages/AlarmAnalysis'
-import HITLQueue from './pages/HITLQueue'
-import ExpertInit from './pages/ExpertInit'
-import LineEfficiency from './pages/LineEfficiency'
-import StrategicSim from './pages/StrategicSim'
+import Dashboard       from './pages/Dashboard'
+import AutoAnnotation  from './pages/AutoAnnotation'
+import HITLQueue       from './pages/HITLQueue'
+import PublicKnowledge from './pages/PublicKnowledge'
+import ExpertKnowledge from './pages/ExpertKnowledge'
+import DocAnnotation   from './pages/DocAnnotation'
+import KBStatus        from './pages/KBStatus'
 
 export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/alarm" element={<AlarmAnalysis />} />
-        <Route path="/hitl" element={<HITLQueue />} />
-        <Route path="/expert-init" element={<ExpertInit />} />
-        <Route path="/line-efficiency" element={<LineEfficiency />} />
-        <Route path="/strategic-sim" element={<StrategicSim />} />
+        <Route path="/"                 element={<Dashboard />} />
+        <Route path="/auto-annotation"  element={<AutoAnnotation />} />
+        <Route path="/hitl"             element={<HITLQueue />} />
+        <Route path="/public-knowledge" element={<PublicKnowledge />} />
+        <Route path="/expert-knowledge" element={<ExpertKnowledge />} />
+        <Route path="/doc-annotation"   element={<DocAnnotation />} />
+        <Route path="/kb-status"        element={<KBStatus />} />
       </Routes>
     </Layout>
   )

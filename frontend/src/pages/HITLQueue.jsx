@@ -1,196 +1,126 @@
 /**
- * HITLQueue — 待审核关系队列（Human-in-the-Loop）
- * LLM 抽取的关系必须经人工确认才能进入知识图谱
+ * HITLQueue — 提示标注工作区（Human-in-the-Loop，原型 v2）
+ * 置信度 0.50–0.79，需人工确认
  */
-import { useEffect, useState } from 'react'
-import { ClipboardCheck, Filter, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react'
-import RelationCard from '../components/RelationCard'
-import { listRelations, approveRelation, rejectRelation } from '../api/client'
+import { useState } from 'react'
+import Toast from '../components/Toast'
 
-// 演示用 mock 数据（当后端不可用时降级展示）
-const MOCK_RELATIONS = [
-  {
-    id: 'rel-mock-1',
-    relation_type: 'ALARM__INDICATES__COMPONENT_FAILURE',
-    source_node_id: 'alarm-VIB-001',
-    target_node_id: '轴承磨损',
-    confidence: 0.58,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: '2024年12月维修记录：1号机振动报警，经检查发现主轴轴承磨损严重，更换后恢复正常。',
-    created_at: '2024-12-15T10:30:00Z',
-  },
-  {
-    id: 'rel-mock-2',
-    relation_type: 'ALARM__INDICATES__COMPONENT_FAILURE',
-    source_node_id: 'alarm-TEMP-002',
-    target_node_id: '电机绕组过热',
-    confidence: 0.62,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: '设备维保手册第7章：温度告警通常与电机绕组绝缘老化或冷却系统失效相关。',
-    created_at: '2025-01-10T08:15:00Z',
-  },
-  {
-    id: 'rel-mock-3',
-    relation_type: 'DEVICE__TRIGGERS__ALARM',
-    source_node_id: 'device-M3',
-    target_node_id: 'alarm-WELD-003',
-    confidence: 0.71,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: 'M3焊接机近半年告警记录分析：过热告警占比67%，主要集中在夜班操作期间。',
-    created_at: '2025-02-20T14:00:00Z',
-  },
+const INIT_QUEUE = [
+  { id: 0, cat: 'alarm',   src: '振动异常 M3 (10:31) — SCADA 事件日志',  f: 'Alarm_Vibration',    r: 'INDICATES', t: 'BearingWear',     c: 0.62, why: '仅观测3次，证据不足' },
+  { id: 1, cat: 'alarm',   src: '高电流 M2 (09:45) — 控制系统日志',      f: 'Alarm_HighCurrent',  r: 'INDICATES', t: 'MotorOverload',    c: 0.68, why: '与历史案例部分匹配' },
+  { id: 2, cat: 'quality', src: '质检结果 BATCH-221 — QMS 导出',        f: 'Process_P3',         r: 'CAUSES',    t: 'Defect_DimError',  c: 0.57, why: '工艺参数偏离，根因不确定' },
+  { id: 3, cat: 'quality', src: '维修记录 2026-01-15 — CMMS',          f: 'Machine_M4',         r: 'AFFECTS',   t: 'Quality_Batch',   c: 0.71, why: '关联度偏低，需专家确认' },
+  { id: 4, cat: 'alarm',   src: '压力下降 M5 (11:02) — SCADA',         f: 'Alarm_PressureDrop', r: 'INDICATES', t: 'SealFailure',      c: 0.59, why: '首次出现此类报警' },
+  { id: 5, cat: 'wo',      src: '工单 WO-041 延误 — MES',             f: 'Alarm_Overheat',     r: 'AFFECTS',   t: 'WorkOrder_WO041', c: 0.73, why: '间接影响，置信度中等' },
 ]
 
-const SORT_OPTIONS = [
-  { value: 'confidence_asc', label: '置信度从低到高' },
-  { value: 'confidence_desc', label: '置信度从高到低' },
-  { value: 'time_desc', label: '最新优先' },
+const FILTERS = [
+  { key: 'all',     label: '全部' },
+  { key: 'alarm',   label: '报警类' },
+  { key: 'quality', label: '质量类' },
+  { key: 'wo',      label: '工单类' },
 ]
+
+const CAT_LABEL = { alarm: '报警类', quality: '质量类', wo: '工单类' }
 
 export default function HITLQueue() {
-  const [relations, setRelations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [useMock, setUseMock] = useState(false)
-  const [sortBy, setSortBy] = useState('confidence_asc')
-  const [approved, setApproved] = useState(new Set())
-  const [rejected, setRejected] = useState(new Set())
+  const [queue, setQueue] = useState(INIT_QUEUE.map(a => ({ ...a, st: 'pending' })))
+  const [filter, setFilter] = useState('all')
+  const [toast, setToast] = useState(null)
+  const msg = (m, c = 'var(--blue)') => setToast({ m, c, k: Date.now() })
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await listRelations({ status: 'pending_review', limit: 50 })
-      const items = Array.isArray(data) ? data : (data?.items || data?.relations || [])
-      if (items.length === 0) {
-        setRelations(MOCK_RELATIONS)
-        setUseMock(true)
-      } else {
-        setRelations(items)
-        setUseMock(false)
-      }
-    } catch {
-      setRelations(MOCK_RELATIONS)
-      setUseMock(true)
-    } finally {
-      setLoading(false)
-    }
+  const act = (id, st) => {
+    setQueue(prev => prev.map(a => a.id === id ? { ...a, st } : a))
+    const msgs = { approve: '已确认并写入图谱 ✓', reject: '已拒绝，置信度下调', modify: '请选择正确关系类型', skip: '已跳过' }
+    const colors = { approve: 'var(--green)', reject: 'var(--red)', modify: 'var(--blue)', skip: 'var(--t2)' }
+    msg(msgs[st] || '已跳过', colors[st] || 'var(--blue)')
   }
 
-  useEffect(() => { load() }, [])
-
-  const sortedRelations = [...relations].sort((a, b) => {
-    if (sortBy === 'confidence_asc') return a.confidence - b.confidence
-    if (sortBy === 'confidence_desc') return b.confidence - a.confidence
-    return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-  })
-
-  const pending = sortedRelations.filter(r => !approved.has(r.id) && !rejected.has(r.id))
-  const doneCount = approved.size + rejected.size
-
-  const handleApprove = async (id) => {
-    try {
-      if (!useMock) await approveRelation(id)
-    } catch { /* 静默处理 */ }
-    setApproved(prev => new Set([...prev, id]))
+  const approveAll = () => {
+    setQueue(prev => prev.map(a =>
+      (filter === 'all' || a.cat === filter) ? { ...a, st: 'approve' } : a
+    ))
+    msg('已全部确认写入', 'var(--green)')
   }
 
-  const handleReject = async (id) => {
-    try {
-      if (!useMock) await rejectRelation(id)
-    } catch { /* 静默处理 */ }
-    setRejected(prev => new Set([...prev, id]))
+  const counts = {
+    all:     queue.filter(a => a.st === 'pending').length,
+    alarm:   queue.filter(a => a.st === 'pending' && a.cat === 'alarm').length,
+    quality: queue.filter(a => a.st === 'pending' && a.cat === 'quality').length,
+    wo:      queue.filter(a => a.st === 'pending' && a.cat === 'wo').length,
   }
+
+  const visible = queue.filter(a =>
+    a.st === 'pending' && (filter === 'all' || a.cat === filter)
+  )
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      {/* 页头 */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <ClipboardCheck className="w-6 h-6 text-yellow-400" />
-          <div>
-            <h1 className="text-2xl font-bold text-white">待审核关系</h1>
-            <p className="text-gray-500 text-sm">Human-in-the-Loop · LLM 抽取关系需人工确认</p>
-          </div>
-        </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-colors text-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </button>
-      </div>
+    <div style={{ padding: '16px 20px' }}>
+      {toast && <Toast key={toast.k} msg={toast.m} color={toast.c} />}
 
-      {/* 演示数据提示 */}
-      {useMock && (
-        <div className="mb-6 bg-blue-900/30 border border-blue-800 rounded-xl px-5 py-3 flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0" />
-          <p className="text-sm text-blue-300">
-            使用演示数据（后端未返回待审核关系）
-          </p>
-        </div>
-      )}
+      <h2 className="page-h2">
+        提示标注工作区
+        <span className="badge b-amber">置信度 0.50–0.79 · 需人工确认</span>
+      </h2>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        以下关系系统无法自信地判断，请您结合现场经验确认。每次确认都会强化系统的学习。
+      </p>
 
-      {/* 统计 + 筛选栏 */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-            <span className="text-sm text-gray-400">待审核 <strong className="text-white">{pending.length}</strong> 条</span>
-          </div>
-          {doneCount > 0 && (
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-400" />
-              <span className="text-sm text-gray-400">已处理 <strong className="text-white">{doneCount}</strong> 条</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="bg-surface border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:border-blue-600"
-          >
-            {SORT_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* 关系列表 */}
-      {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-surface rounded-xl border border-gray-700 h-40 animate-pulse" />
+      {/* 筛选栏 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span className="muted">筛选：</span>
+        <div>
+          {FILTERS.map(f => (
+            <span
+              key={f.key}
+              className={`chip ${filter === f.key ? 'on' : ''}`}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label} ({counts[f.key] ?? 0})
+            </span>
           ))}
         </div>
-      ) : pending.length > 0 ? (
-        <div className="space-y-4">
-          {pending.map(rel => (
-            <RelationCard
-              key={rel.id}
-              relation={rel}
-              onApprove={handleApprove}
-              onReject={handleReject}
-            />
-          ))}
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-ok btn-sm" onClick={approveAll}>全部确认</button>
+        <button className="btn btn-sm" onClick={() => msg('已跳过全部')}>跳过全部</button>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--t2)' }}>
+          ✓ 所有待标注项已处理
         </div>
       ) : (
-        <div className="text-center py-16">
-          <CheckCircle className="w-12 h-12 text-confidence-high mx-auto mb-4" />
-          <p className="text-lg font-semibold text-white">全部审核完成</p>
-          <p className="text-gray-500 text-sm mt-1">
-            已处理 {doneCount} 条关系（{approved.size} 确认，{rejected.size} 否定）
-          </p>
-        </div>
+        visible.map(a => (
+          <div className="ann-card" key={a.id}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className={`badge ${a.c < 0.65 ? 'b-red' : a.c < 0.75 ? 'b-amber' : 'b-blue'}`}>
+                  {a.c.toFixed(2)} 置信度
+                </span>
+                <span className="badge b-gray">{CAT_LABEL[a.cat]}</span>
+              </div>
+              <span style={{ fontSize: 10, color: 'var(--t3)' }}>不确定原因：{a.why}</span>
+            </div>
+            <div className="ann-src" style={{ marginBottom: 8 }}>来源：{a.src}</div>
+            <div className="rrow" style={{ marginBottom: 8 }}>
+              <span className="rnode">{a.f}</span>
+              <span style={{ fontSize: 11, color: 'var(--t2)' }}>→ {a.r} →</span>
+              <span className="rnode">{a.t}</span>
+              <div className="cbar" style={{ flex: 1 }}>
+                <div
+                  className={`cfill ${a.c < 0.65 ? 'cf-low' : a.c < 0.75 ? 'cf-mid' : 'cf-high'}`}
+                  style={{ width: `${a.c * 100}%` }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-ok btn-sm" onClick={() => act(a.id, 'approve')}>✓ 正确，写入</button>
+              <button className="btn btn-no btn-sm" onClick={() => act(a.id, 'reject')}>✗ 错误</button>
+              <button className="btn btn-sm" onClick={() => act(a.id, 'modify')}>✎ 修改关系类型</button>
+              <button className="btn btn-sm" onClick={() => act(a.id, 'skip')}>跳过</button>
+            </div>
+          </div>
+        ))
       )}
     </div>
   )
