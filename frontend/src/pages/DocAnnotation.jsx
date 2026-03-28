@@ -51,10 +51,10 @@ export default function DocAnnotation() {
   const rejected = docRels.filter(r => r.st === 'rejected')
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} color={toast.c} />}
 
-      <h2 className="page-h2">
+      <h2>
         企业文档标注
         <span className="layer-pill lp3">知识层 3 · Enterprise Docs</span>
       </h2>
@@ -94,10 +94,10 @@ export default function DocAnnotation() {
         <div className="card">
           <h3 style={{ fontSize: 12, fontWeight: 500, margin: '0 0 8px' }}>预标注处理统计</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div className="stat-card"><div className="stat-value" style={{ color: 'var(--blue)' }}>5</div><div className="stat-label">已处理文档</div></div>
-            <div className="stat-card"><div className="stat-value" style={{ color: 'var(--amber)' }}>{pending.length}</div><div className="stat-label">待审核关系</div></div>
-            <div className="stat-card"><div className="stat-value" style={{ color: 'var(--green)' }}>{approved.length}</div><div className="stat-label">已确认关系</div></div>
-            <div className="stat-card"><div className="stat-value" style={{ color: 'var(--red)' }}>{rejected.length}</div><div className="stat-label">已拒绝关系</div></div>
+            <div className="stat"><div className="stat-v" style={{ color: 'var(--blue)' }}>5</div><div className="stat-l">已处理文档</div></div>
+            <div className="stat"><div className="stat-v" style={{ color: 'var(--amber)' }}>{pending.length}</div><div className="stat-l">待审核关系</div></div>
+            <div className="stat"><div className="stat-v" style={{ color: 'var(--green)' }}>{approved.length}</div><div className="stat-l">已确认关系</div></div>
+            <div className="stat"><div className="stat-v" style={{ color: 'var(--red)' }}>{rejected.length}</div><div className="stat-l">已拒绝关系</div></div>
           </div>
           <div className="hdiv" />
           <div style={{ fontSize: 11, color: 'var(--t2)', lineHeight: 1.7 }}>

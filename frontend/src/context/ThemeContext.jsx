@@ -31,6 +31,7 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement
     root.classList.remove('theme-light', 'theme-dark')
     root.classList.add(theme === 'dark' ? 'theme-dark' : 'theme-light')
+    root.style.colorScheme = theme === 'dark' ? 'dark' : 'light'
     try {
       localStorage.setItem(STORAGE_KEY, theme)
     } catch {

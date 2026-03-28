@@ -353,3 +353,19 @@ def _build_drafts(raw: list[dict[str, Any]]) -> list[ExtractedRelationDraft]:
             continue
 
     return drafts
+
+
+async def extract_relations_plain_text(text: str, source_filename: str = "public_knowledge.txt") -> list[ExtractedRelationDraft]:
+    """
+    从纯文本抽取候选关系（公开知识页）。
+    与文档上传共用 LLM / Mock 分支逻辑。
+    """
+    body = (text or "").strip()
+    if not body:
+        return []
+    doc = ParsedDocument(
+        template_type=TemplateType.UNKNOWN,
+        source_filename=source_filename,
+        sections={"正文": body[:12000]},
+    )
+    return await extract_relations(doc)

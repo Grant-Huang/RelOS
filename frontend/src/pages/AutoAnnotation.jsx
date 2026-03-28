@@ -25,10 +25,10 @@ export default function AutoAnnotation() {
   const msg = (m) => setToast({ m, k: Date.now() })
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} />}
 
-      <h2 className="page-h2">
+      <h2>
         自动标注监控
         <span className="badge b-green">置信度 ≥ 0.80 自动写入</span>
       </h2>
@@ -95,13 +95,13 @@ export default function AutoAnnotation() {
           <h3 style={{ fontSize: 12, fontWeight: 500, margin: '0 0 8px' }}>自动标注质量追踪</h3>
           <p className="muted" style={{ marginBottom: 8 }}>基于用户后续反馈计算</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-            <div className="stat-card">
-              <div className="stat-value" style={{ color: 'var(--green)' }}>94.2%</div>
-              <div className="stat-label">IoT规则准确率</div>
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--green)' }}>94.2%</div>
+              <div className="stat-l">IoT规则准确率</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-value" style={{ color: 'var(--blue)' }}>81.7%</div>
-              <div className="stat-label">LLM文档准确率</div>
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--blue)' }}>81.7%</div>
+              <div className="stat-l">LLM文档准确率</div>
             </div>
           </div>
           <div className="hdiv" />

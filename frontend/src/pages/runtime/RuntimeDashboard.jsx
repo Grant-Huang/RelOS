@@ -1,146 +1,215 @@
 /**
- * 运行时仪表盘：有什么事、建议什么、下一步去哪（易用性优先）
+ * 运行时仪表盘：指标来自 GET /v1/metrics，事件流来自 GET /v1/telemetry/runtime-feed
  */
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Bell, ClipboardCheck, Activity, ChevronDown, ChevronUp, RefreshCw, AlertTriangle } from 'lucide-react'
-import { getMetrics, getRiskRadar } from '../../api/client'
+import { useCallback, useEffect, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { getMetrics, getRuntimeFeed } from '../../api/client'
+
+function toastColor(hex) {
+  if (hex === '#3B6D11') return 'var(--green)'
+  if (hex === '#A32D2D') return 'var(--red)'
+  return 'var(--blue)'
+}
+
+function EvRow({ ev }) {
+  const typeLabel =
+    ev.timeLineLabel ??
+    (ev.type === 'auto' ? '自动标注' : ev.type === 'prompt' ? '待确认' : '新事件')
+  const cf = ev.c >= 0.8 ? 'cf-high' : ev.c >= 0.65 ? 'cf-mid' : 'cf-low'
+  const rel = ev.rel || { f: '—', r: '—', t: '—' }
+  return (
+    <div className={`ev-item ev-${ev.type || 'auto'}`}>
+      <div className="ev-time">
+        {ev.ts} · {typeLabel}
+      </div>
+      <div className="ev-title">{ev.label}</div>
+      <div className="ev-rel">
+        <span className="rnode">{rel.f}</span>
+        <span style={{ fontSize: 10, color: 'var(--t2)' }}>→ {rel.r} →</span>
+        <span className="rnode">{rel.t}</span>
+        {ev.compact ? (
+          <span className={`badge ${ev.c >= 0.8 ? 'b-green' : 'b-amber'}`} style={{ fontSize: 9 }}>
+            {Number(ev.c).toFixed(2)}
+          </span>
+        ) : (
+          <>
+            <div className="cbar" style={{ maxWidth: 50 }}>
+              <div className={`cfill ${cf}`} style={{ width: `${Number(ev.c) * 100}%` }} />
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 500 }}>{Number(ev.c).toFixed(2)}</span>
+            {ev.type === 'auto' ? (
+              <span className="badge b-green" style={{ fontSize: 9 }}>
+                自动写入
+              </span>
+            ) : (
+              <span className="badge b-amber" style={{ fontSize: 9 }}>
+                待确认
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const PROV_LABEL = {
+  sensor_realtime: 'IoT 自动抽取',
+  llm_extracted: 'LLM / 文档抽取',
+  manual_engineer: '专家手动输入',
+  mes_structured: 'MES 结构化',
+  inference: '系统推断',
+  structured_document: '企业文档',
+  expert_document: '专家文档',
+  unknown: '其他',
+}
 
 export default function RuntimeDashboard() {
-  const navigate = useNavigate()
+  const [events, setEvents] = useState([])
   const [metrics, setMetrics] = useState(null)
-  const [risk, setRisk] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [expandMetrics, setExpandMetrics] = useState(false)
+  const [feedErr, setFeedErr] = useState(null)
+  const [notif, setNotif] = useState(null)
 
-  const load = async () => {
+  const toast = useCallback((msg, color = '#185FA5') => {
+    setNotif({ msg, color: toastColor(color) })
+    window.setTimeout(() => setNotif(null), 2500)
+  }, [])
+
+  const refresh = useCallback(async () => {
     setLoading(true)
+    setFeedErr(null)
     try {
-      const [m, r] = await Promise.all([getMetrics().catch(() => null), getRiskRadar().catch(() => null)])
+      const [m, feed] = await Promise.all([
+        getMetrics().catch(() => null),
+        getRuntimeFeed(12).catch((e) => {
+          setFeedErr(e.message || '事件流加载失败')
+          return []
+        }),
+      ])
       setMetrics(m)
-      setRisk(r)
+      const list = Array.isArray(feed) ? feed : []
+      setEvents(
+        list.map((ev) => ({
+          ...ev,
+          compact: true,
+          timeLineLabel: ev.type === 'auto' ? '自动标注' : '待确认',
+        })),
+      )
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    load()
   }, [])
 
-  const pending = metrics?.pending_review_count ?? '—'
-  const totalRel = metrics?.total_relations ?? '—'
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  const totalRel = metrics?.total_relations ?? 0
+  const pending = metrics?.pending_review_count ?? 0
+  const provRows = metrics?.provenance_breakdown || []
+  const maxProv = Math.max(1, ...provRows.map((p) => p.count))
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto">
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold mb-1" style={{ color: 'var(--wb-text)' }}>
-            运行时仪表盘
-          </h1>
-          <p className="text-sm wb-text-muted">操作员视角 · 现在有什么事、系统建议什么、我要做什么决定</p>
-        </div>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="wb-btn-ghost flex items-center gap-2 text-sm min-h-[44px]"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+    <div className="relos-page">
+      <div
+        className={`relos-notif${notif ? ' on' : ''}`}
+        style={notif ? { background: notif.color } : undefined}
+      >
+        {notif?.msg}
+      </div>
+
+      <h2>
+        运行时仪表盘 <span className="badge b-blue">用户前端 · 操作员视角</span>
+      </h2>
+
+      <div className="muted mb12" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span>指标与事件流来自后端 API；埋点为内存存储，重启后清空。</span>
+        <button type="button" className="btn btn-sm" onClick={refresh} disabled={loading}>
+          <RefreshCw className={loading ? 'relos-icon-spin' : ''} style={{ width: 12, height: 12 }} />
           刷新
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <button
-          type="button"
-          onClick={() => navigate('/runtime/prompt')}
-          className="wb-card p-4 text-left hover:opacity-95 transition-opacity min-h-[88px]"
-        >
-          <p className="text-2xl font-semibold tabular-nums" style={{ color: 'var(--wb-amber)' }}>
-            {pending}
-          </p>
-          <p className="text-xs wb-text-muted mt-1">待提示确认（0.50–0.79）</p>
-        </button>
-        <div className="wb-card p-4 min-h-[88px]">
-          <p className="text-2xl font-semibold tabular-nums wb-text-secondary">{totalRel}</p>
-          <p className="text-xs wb-text-muted mt-1">图谱关系总数</p>
+      <div className="g4 mb12">
+        <div className="stat">
+          <div className="stat-v" style={{ color: 'var(--t3)' }}>—</div>
+          <div className="stat-l">今日已处理报警（待对接业务 API）</div>
         </div>
-        <div className="wb-card p-4 min-h-[88px] col-span-2 md:col-span-1">
-          <p className="text-sm font-medium wb-text-secondary line-clamp-2">
-            {risk?.top_risk?.name ? `当前最高风险：${risk.top_risk.name}` : '风险数据未加载'}
-          </p>
-          <p className="text-xs wb-text-muted mt-1">详见下方折叠区</p>
+        <div className="stat">
+          <div className="stat-v" style={{ color: 'var(--t3)' }}>—</div>
+          <div className="stat-l">自动标注命中率（待对接）</div>
+        </div>
+        <div className="stat">
+          <div className="stat-v" style={{ color: 'var(--amber)' }}>
+            {loading ? '…' : pending}
+          </div>
+          <div className="stat-l">待人工确认（pending_review）</div>
+        </div>
+        <div className="stat">
+          <div className="stat-v" style={{ color: 'var(--t1)' }}>
+            {loading ? '…' : totalRel.toLocaleString('zh-CN')}
+          </div>
+          <div className="stat-l">图谱关系总数</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
-        <button
-          type="button"
-          onClick={() => navigate('/alarm')}
-          className="wb-card p-5 text-left border-2 border-transparent hover:border-[var(--wb-blue)] min-h-[100px]"
-        >
-          <Bell className="w-6 h-6 mb-2" style={{ color: 'var(--wb-red)' }} />
-          <p className="font-semibold" style={{ color: 'var(--wb-text)' }}>
-            分析告警
+      <div className="g2">
+        <div className="card">
+          <h3>
+            实时事件流{' '}
+            <span className="badge b-gray" style={{ fontSize: 10 }}>
+              埋点
+            </span>
+          </h3>
+          {feedErr ? <p className="muted" style={{ color: 'var(--red)', fontSize: 12 }}>{feedErr}</p> : null}
+          {!loading && !feedErr && events.length === 0 ? (
+            <p className="muted" style={{ fontSize: 12 }}>
+              暂无埋点事件。使用告警分析等功能会产生遥测并显示于此。
+            </p>
+          ) : null}
+          <div>
+            {events.map((ev, i) => (
+              <EvRow key={`${ev.ts}-${ev.label}-${i}`} ev={ev} />
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>当前活跃决策建议</h3>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            聚合决策流尚未提供独立 API；请使用 <strong>告警分析</strong> 或 <strong>提示标注</strong> 完成闭环操作。
           </p>
-          <p className="text-sm wb-text-muted mt-1">获取根因推荐与流式解释</p>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/runtime/automation')}
-          className="wb-card p-5 text-left border-2 border-transparent hover:border-[var(--wb-green)] min-h-[100px]"
-        >
-          <Activity className="w-6 h-6 mb-2" style={{ color: 'var(--wb-green)' }} />
-          <p className="font-semibold" style={{ color: 'var(--wb-text)' }}>
-            自动标注监控
-          </p>
-          <p className="text-sm wb-text-muted mt-1">看系统背后自动做了什么</p>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/runtime/prompt')}
-          className="wb-card p-5 text-left border-2 border-transparent hover:border-[var(--wb-amber)] min-h-[100px]"
-        >
-          <ClipboardCheck className="w-6 h-6 mb-2" style={{ color: 'var(--wb-amber)' }} />
-          <p className="font-semibold" style={{ color: 'var(--wb-text)' }}>
-            提示标注工作区
-          </p>
-          <p className="text-sm wb-text-muted mt-1">中等置信度 · 人工确认强化学习</p>
-        </button>
+          <button type="button" className="btn btn-sm" onClick={() => toast('请从侧边栏进入「告警根因分析」或「提示标注工作区」', '#185FA5')}>
+            查看引导
+          </button>
+        </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setExpandMetrics((v) => !v)}
-        className="flex items-center gap-2 text-sm wb-text-secondary mb-2 min-h-[44px]"
-      >
-        {expandMetrics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        企业风险与图谱详情（可选展开）
-      </button>
-
-      {expandMetrics && (
-        <div className="wb-card p-4 space-y-4">
-          {risk?.overall_risk_level && (
-            <div className="flex items-center gap-2 text-sm">
-              <AlertTriangle className="w-4 h-4" style={{ color: 'var(--wb-amber)' }} />
-              <span className="wb-text-secondary">
-                整体风险等级：<strong>{risk.overall_risk_level}</strong>
-                {risk.top_risk?.score_pct != null && ` · 顶部域 ${risk.top_risk.score_pct}%`}
-              </span>
-            </div>
-          )}
-          {metrics && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs wb-text-muted">
-              <span>活跃关系：{metrics.active_count ?? '—'}</span>
-              <span>节点：{metrics.total_nodes ?? '—'}</span>
-              <span>待审核：{metrics.pending_review_count ?? '—'}</span>
-              <span>关系总数：{metrics.total_relations ?? '—'}</span>
-            </div>
-          )}
-          {!risk && !metrics && <p className="text-sm wb-text-muted">暂无后端数据</p>}
-        </div>
-      )}
+      <div className="card mt10">
+        <h3>关系来源分布（图谱）</h3>
+        {!metrics?.provenance_breakdown?.length ? (
+          <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>暂无数据或尚未加载 metrics。</p>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+            {provRows.slice(0, 6).map((p) => {
+              const label = PROV_LABEL[p.provenance] || p.provenance
+              const pct = Math.round((p.count / maxProv) * 100)
+              return (
+                <div key={p.provenance} style={{ flex: 1, minWidth: 120 }}>
+                  <div style={{ fontSize: 11, color: 'var(--t2)', marginBottom: 4 }}>{label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="cbar">
+                      <div className="cfill cf-mid" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--t1)' }}>{p.count}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

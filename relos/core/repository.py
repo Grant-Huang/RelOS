@@ -268,6 +268,64 @@ class RelationRepository:
             "archived_count": rel_record["archived_count"] if rel_record else 0,
         }
 
+    async def get_relation_type_distribution(self, limit: int = 8) -> list[dict[str, Any]]:
+        """按关系类型聚合数量与平均置信度（供知识库状态等页）。"""
+        limit = max(1, min(24, limit))
+        query = """
+        MATCH ()-[r]->()
+        RETURN type(r) AS rel_type, count(*) AS cnt, avg(r.confidence) AS avg_c
+        ORDER BY cnt DESC
+        LIMIT $limit
+        """
+        async with self._driver.session(database=self._db) as session:
+            result = await session.run(query, limit=limit)
+            rows = await result.data()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            avg_c = row.get("avg_c")
+            out.append({
+                "relation_type": row.get("rel_type") or "",
+                "count": int(row.get("cnt") or 0),
+                "avg_confidence": round(float(avg_c), 4) if avg_c is not None else 0.0,
+            })
+        return out
+
+    async def get_provenance_distribution(self) -> list[dict[str, Any]]:
+        """按 provenance 聚合关系数量。"""
+        query = """
+        MATCH ()-[r]->()
+        RETURN coalesce(r.provenance, 'unknown') AS prov, count(*) AS cnt
+        ORDER BY cnt DESC
+        """
+        async with self._driver.session(database=self._db) as session:
+            result = await session.run(query)
+            rows = await result.data()
+        return [
+            {"provenance": row.get("prov") or "unknown", "count": int(row.get("cnt") or 0)}
+            for row in rows
+        ]
+
+    async def get_knowledge_phase_distribution(self) -> list[dict[str, Any]]:
+        """按 knowledge_phase 聚合（用于三层知识结构概览）。"""
+        query = """
+        MATCH ()-[r]->()
+        RETURN coalesce(r.knowledge_phase, 'bootstrap') AS phase, count(*) AS cnt,
+               avg(r.confidence) AS avg_c
+        ORDER BY cnt DESC
+        """
+        async with self._driver.session(database=self._db) as session:
+            result = await session.run(query)
+            rows = await result.data()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            ac = row.get("avg_c")
+            out.append({
+                "phase": row.get("phase") or "bootstrap",
+                "count": int(row.get("cnt") or 0),
+                "avg_confidence": round(float(ac), 4) if ac is not None else 0.0,
+            })
+        return out
+
     async def get_pending_review_relations(
         self,
         limit: int = 50,

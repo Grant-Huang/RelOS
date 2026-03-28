@@ -1,20 +1,13 @@
 /**
- * Layout — 工作台侧栏 + 主题切换 + 移动端抽屉
+ * 布局：对齐 docs/relos_workbench_v2.html（.app + .side + .main）
  */
-import { useState } from 'react'
-import { Menu, X } from 'lucide-react'
 import WorkbenchSidebar from './WorkbenchSidebar'
-import ThemeToggle from './ThemeToggle'
 
 export default function Layout({ children }) {
-  const [open, setOpen] = useState(false)
-
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg3)' }}>
-      <Sidebar />
-      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg3)' }}>
-        {children}
-      </main>
+    <div className="app">
+      <WorkbenchSidebar />
+      <main className="main">{children}</main>
     </div>
   )
 }

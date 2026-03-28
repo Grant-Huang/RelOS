@@ -700,6 +700,50 @@ RELATIONS: list[RelationObject] = [
             "overheat_threshold_load_pct": 85,
         },
     ),
+
+    # ── 提示标注队列补充（pending_review · 置信度 0.50–0.79）────────────────
+    RelationObject(
+        id="demo-rel-prompt-004",
+        relation_type="ALARM__AFFECTS__WORKORDER",
+        source_node_id="alarm-TEMP-002",
+        source_node_type="Alarm",
+        target_node_id="workorder-WO-003",
+        target_node_type="WorkOrder",
+        confidence=0.61,
+        provenance=SourceType.LLM_EXTRACTED,
+        provenance_detail="MES 关联：温度告警与 WO-003 进度异常（待提示标注确认）",
+        half_life_days=60,
+        status=RelationStatus.PENDING_REVIEW,
+        properties={},
+    ),
+    RelationObject(
+        id="demo-rel-prompt-005",
+        relation_type="ALARM__INDICATES__COMPONENT_FAILURE",
+        source_node_id="alarm-VIB-001",
+        source_node_type="Alarm",
+        target_node_id="component-coolant-M1",
+        target_node_type="Component",
+        confidence=0.55,
+        provenance=SourceType.LLM_EXTRACTED,
+        provenance_detail="维修记录摘要：振动告警可能与冷却系统流量不足并存（低置信度）",
+        half_life_days=90,
+        status=RelationStatus.PENDING_REVIEW,
+        properties={},
+    ),
+    RelationObject(
+        id="demo-rel-prompt-006",
+        relation_type="MACHINE__AFFECTS__QUALITY",
+        source_node_id="machine-M3",
+        source_node_type="Machine",
+        target_node_id="issue-BEAR-001",
+        target_node_type="Issue",
+        confidence=0.58,
+        provenance=SourceType.LLM_EXTRACTED,
+        provenance_detail="QMS 导出：焊接线缺陷报告与 M3 停机时段重叠（待确认）",
+        half_life_days=90,
+        status=RelationStatus.PENDING_REVIEW,
+        properties={},
+    ),
 ]
 
 
@@ -751,6 +795,7 @@ async def seed_demo() -> None:
     print("   场景10 → GET /v1/scenarios/risk-radar")
     print("   场景11 → GET /v1/scenarios/resource-optimization")
     print("   场景12 → POST /v1/scenarios/strategic-simulation")
+    print("   提示标注 → GET /v1/relations/pending-review（含多条 demo-rel-prompt-* · pending_review）")
 
 
 if __name__ == "__main__":

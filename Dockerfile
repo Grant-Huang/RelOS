@@ -29,7 +29,17 @@ RUN pip install --no-cache-dir --upgrade pip \
         "structlog>=24.4.0" \
         "python-dotenv>=1.0.0" \
         "httpx>=0.28.0" \
-        "anthropic>=0.40.0"
+        "anthropic>=0.40.0" \
+        "openpyxl>=3.1.0" \
+        "python-docx>=1.1.0" \
+        "python-multipart>=0.0.9" \
+        "temporalio>=1.7.0" \
+        "langsmith>=0.1.0"
+
+# 将 relos 安装到 site-packages，避免仅依赖 /app 挂载时出现
+# ModuleNotFoundError: No module named 'relos'（例如挂载目录不含 relos/ 子目录时）
+COPY relos/ ./relos/
+RUN pip install --no-cache-dir . --no-deps
 
 
 # ── 阶段 2：开发模式（热重载，挂载源码）─────────────────────────
@@ -44,7 +54,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # 额外安装开发工具
 RUN pip install --no-cache-dir pytest pytest-asyncio ruff
 
-# 不复制源码（docker-compose 通过 volume 挂载）
+# 源码默认由 docker-compose 挂载到 /app；未挂载或挂载路径错误时仍可从
+# site-packages 中的已安装包导入 relos（热重载以 /app/relos 为准）
 EXPOSE 8000
 CMD ["uvicorn", "relos.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 

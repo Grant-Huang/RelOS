@@ -141,6 +141,25 @@ export const runStrategicSimulation = (expansionPct) =>
 // ── 图谱统计 ──────────────────────────────────────────
 export const getMetrics = () => request('GET', '/metrics')
 
+// ── 配置与演示数据（data/demo/*.json，由后端读取）──────────
+export const getQuickAlarmsConfig = async () => {
+  const res = await request('GET', '/config/quick-alarms')
+  return res?.data?.items ?? []
+}
+
+export const getTextSamplesConfig = async () => {
+  const res = await request('GET', '/config/text-samples')
+  return res?.data?.samples ?? {}
+}
+
+// ── 公开知识：纯文本抽取（不入库）────────────────────────
+export const extractPublicKnowledge = (payload) =>
+  request('POST', '/knowledge/public/extract', payload)
+
+// ── 运行时仪表盘事件流（来自埋点）────────────────────────
+export const getRuntimeFeed = (limit = 12) =>
+  request('GET', `/telemetry/runtime-feed?limit=${limit}`)
+
 // ── 专家初始化 ────────────────────────────────────────
 export const expertInitRelation = (payload) =>
   request('POST', '/expert-init', payload)

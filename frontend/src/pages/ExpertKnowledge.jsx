@@ -91,10 +91,10 @@ export default function ExpertKnowledge() {
   }
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} color={toast.c} />}
 
-      <h2 className="page-h2">
+      <h2>
         专家知识采集
         <span className="layer-pill lp2">知识层 2 · Expert Knowledge</span>
       </h2>

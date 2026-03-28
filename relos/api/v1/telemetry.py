@@ -73,3 +73,42 @@ async def list_events(limit: int = 50) -> list[dict[str, Any]]:
     limit = max(1, min(200, limit))
     return list(reversed(_events[-limit:]))
 
+
+def _format_ts(iso_ts: str) -> str:
+    try:
+        if not iso_ts:
+            return "—"
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        return dt.strftime("%H:%M")
+    except Exception:
+        return iso_ts[:5] if len(iso_ts) >= 5 else "—"
+
+
+def _event_to_runtime_row(ev: dict[str, Any]) -> dict[str, Any]:
+    """将埋点转为运行时仪表盘事件行结构。"""
+    p = ev.get("props") or {}
+    name = (ev.get("event_name") or "event").lower()
+    conf = p.get("confidence")
+    c = float(conf) if isinstance(conf, (int, float)) else 0.82
+    c = min(0.99, max(0.1, c))
+    src = str(p.get("source_id") or p.get("entity") or p.get("device_id") or "source")[:32]
+    tgt = str(p.get("target_id") or p.get("result") or "target")[:32]
+    rel = str(p.get("relation") or "RELATES")[:24]
+    label = str(p.get("label") or ev.get("event_name") or "事件")[:80]
+    is_prompt = any(x in name for x in ("prompt", "recommendation", "question", "hitl"))
+    return {
+        "type": "prompt" if is_prompt else "auto",
+        "label": label,
+        "rel": {"f": src, "r": rel, "t": tgt},
+        "c": c,
+        "ts": _format_ts(str(ev.get("timestamp") or "")),
+    }
+
+
+@router.get("/runtime-feed", response_model=list[dict[str, Any]])
+async def runtime_feed(limit: int = 12) -> list[dict[str, Any]]:
+    """最近埋点，供运行时仪表盘事件流（无数据则返回空列表）。"""
+    limit = max(1, min(50, limit))
+    chunk = list(reversed(_events[-limit:]))
+    return [_event_to_runtime_row(e) for e in chunk]
+

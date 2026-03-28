@@ -29,17 +29,17 @@ function StepIndicator({ current }) {
             <div className={`flex items-center gap-2 ${active ? '' : done ? 'opacity-60' : 'opacity-30'}`}>
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border ${
                 done ? 'bg-confidence-high border-confidence-high text-white' :
-                active ? 'border-blue-500 text-blue-400' :
-                'border-gray-700 text-gray-600'
+                active ? 'border-[color:var(--blue)] text-[color:var(--blue)]' :
+                'border-[color:var(--b2)] text-[color:var(--t3)]'
               }`}>
                 {done ? <CheckCircle className="w-4 h-4" /> : i + 1}
               </div>
-              <span className={`text-sm ${active ? 'text-white font-medium' : 'text-gray-500'}`}>
+              <span className={`text-sm ${active ? 'text-[color:var(--t1)] font-medium' : 'text-[color:var(--t2)]'}`}>
                 {label}
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <ChevronRight className="w-4 h-4 text-gray-700 mx-1" />
+              <ChevronRight className="w-4 h-4 mx-1" style={{ color: 'var(--t3)' }} />
             )}
           </div>
         )
@@ -172,8 +172,8 @@ export default function ExpertInit({ embedded = false }) {
         <div className="flex items-center gap-3 mb-8">
           <UserCog className="w-6 h-6 text-purple-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white">专家初始化向导</h1>
-            <p className="text-gray-500 text-sm">将现场经验沉淀为知识图谱</p>
+            <h1 className="text-2xl font-bold text-[color:var(--t1)]">专家初始化向导</h1>
+            <p className="text-[color:var(--t2)] text-sm">将现场经验沉淀为知识图谱</p>
           </div>
         </div>
       )}
@@ -182,55 +182,55 @@ export default function ExpertInit({ embedded = false }) {
 
       {/* 步骤 1：设备信息 */}
       {step === 0 && (
-        <div className="bg-surface rounded-xl border border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-white mb-5">设备基本信息</h2>
+        <div className="relos-panel mb-6">
+          <h2 className="text-lg font-semibold text-[color:var(--t1)] mb-5">设备基本信息</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">设备类型 *</label>
+              <label className="block text-xs text-[color:var(--t2)] mb-1.5">设备类型 *</label>
               <select
                 value={device.type}
                 onChange={(e) => setDevice({ ...device, type: e.target.value })}
-                className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-600"
+                className="relos-field"
               >
                 <option value="">请选择...</option>
                 {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">设备名称 *</label>
+              <label className="block text-xs text-[color:var(--t2)] mb-1.5">设备名称 *</label>
               <input
                 type="text"
                 value={device.name}
                 onChange={(e) => setDevice({ ...device, name: e.target.value })}
                 placeholder="如：1号注塑机"
-                className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                className="relos-field"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">设备 ID</label>
+              <label className="block text-xs text-[color:var(--t2)] mb-1.5">设备 ID</label>
               <input
                 type="text"
                 value={device.device_id}
                 onChange={(e) => setDevice({ ...device, device_id: e.target.value })}
                 placeholder="如：device-M1"
-                className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                className="relos-field"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">车间/位置</label>
+              <label className="block text-xs text-[color:var(--t2)] mb-1.5">车间/位置</label>
               <input
                 type="text"
                 value={device.location}
                 onChange={(e) => setDevice({ ...device, location: e.target.value })}
                 placeholder="如：A栋一车间"
-                className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                className="relos-field"
               />
             </div>
           </div>
           <button
             onClick={() => setStep(1)}
             disabled={!device.type || !device.name}
-            className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold text-white"
+            className="btn btn-p mt-6 w-full justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             下一步 <ChevronRight className="w-4 h-4" />
           </button>
@@ -240,28 +240,28 @@ export default function ExpertInit({ embedded = false }) {
       {/* 步骤 2：录入关系 */}
       {step === 1 && (
         <div className="space-y-4">
-          <div className="bg-surface rounded-xl border border-gray-700 p-5">
-            <p className="text-xs text-gray-500 mb-1">正在为设备录入经验关系</p>
-            <p className="text-white font-semibold">{device.type} · {device.name}</p>
+          <div className="relos-panel mb-4">
+            <p className="text-xs text-[color:var(--t2)] mb-1">正在为设备录入经验关系</p>
+            <p className="text-[color:var(--t1)] font-semibold">{device.type} · {device.name}</p>
           </div>
 
           {relations.map((rel, i) => (
-            <div key={i} className="bg-surface rounded-xl border border-gray-700 p-5">
+            <div key={i} className="relos-panel mb-4">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-gray-300">关系 #{i + 1}</span>
+                <span className="text-sm font-medium text-[color:var(--t2)]">关系 #{i + 1}</span>
                 {relations.length > 1 && (
-                  <button onClick={() => removeRelation(i)} className="text-gray-600 hover:text-red-400 transition-colors">
+                  <button onClick={() => removeRelation(i)} className="text-[color:var(--t3)] hover:text-red-400 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">关系类型</label>
+                  <label className="block text-xs text-[color:var(--t2)] mb-1.5">关系类型</label>
                   <select
                     value={rel.relation_type}
                     onChange={(e) => updateRelation(i, 'relation_type', e.target.value)}
-                    className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-600"
+                    className="relos-field"
                   >
                     {RELATION_TEMPLATES.map(t => (
                       <option key={t.value} value={t.value}>{t.label}</option>
@@ -270,28 +270,28 @@ export default function ExpertInit({ embedded = false }) {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">告警码 *</label>
+                    <label className="block text-xs text-[color:var(--t2)] mb-1.5">告警码 *</label>
                     <input
                       type="text"
                       value={rel.alarm_code}
                       onChange={(e) => updateRelation(i, 'alarm_code', e.target.value)}
                       placeholder="如 VIB-001"
-                      className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                      className="relos-field"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5">根因部件 *</label>
+                    <label className="block text-xs text-[color:var(--t2)] mb-1.5">根因部件 *</label>
                     <input
                       type="text"
                       value={rel.cause}
                       onChange={(e) => updateRelation(i, 'cause', e.target.value)}
                       placeholder="如 轴承磨损"
-                      className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                      className="relos-field"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-2">
+                  <label className="block text-xs text-[color:var(--t2)] mb-2">
                     置信度：{Math.round(rel.confidence * 100)}%
                   </label>
                   <input
@@ -306,13 +306,13 @@ export default function ExpertInit({ embedded = false }) {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1.5">备注（可选）</label>
+                  <label className="block text-xs text-[color:var(--t2)] mb-1.5">备注（可选）</label>
                   <textarea
                     value={rel.notes}
                     onChange={(e) => updateRelation(i, 'notes', e.target.value)}
                     placeholder="如：高温天气下此故障概率更高"
                     rows={2}
-                    className="w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600 resize-none"
+                    className="relos-field resize-y min-h-[80px]"
                   />
                 </div>
               </div>
@@ -321,7 +321,7 @@ export default function ExpertInit({ embedded = false }) {
 
           <button
             onClick={addRelation}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-400 transition-colors text-sm"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg border border-dashed border-[color:var(--b2)] text-[color:var(--t2)] hover:text-[color:var(--t2)] hover:border-[color:var(--blue)] transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
             再添加一条关系
@@ -330,13 +330,13 @@ export default function ExpertInit({ embedded = false }) {
           <div className="flex gap-3">
             <button
               onClick={() => setStep(0)}
-              className="flex items-center gap-2 px-4 py-3 rounded-lg border border-gray-700 text-gray-400 hover:text-white transition-colors text-sm"
+              className="flex items-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--b2)] text-[color:var(--t3)] hover:text-[color:var(--t1)] transition-colors text-sm"
             >
               <ChevronLeft className="w-4 h-4" /> 上一步
             </button>
             <button
               onClick={() => setStep(2)}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors font-semibold text-white"
+              className="btn btn-p flex-1 justify-center"
             >
               下一步 <ChevronRight className="w-4 h-4" />
             </button>
@@ -347,13 +347,13 @@ export default function ExpertInit({ embedded = false }) {
       {/* 步骤 3：批量导入（可选） */}
       {step === 2 && (
         <div className="space-y-4">
-          <div className="bg-surface rounded-xl border border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-2">导入历史数据（可选）</h2>
-            <p className="text-sm text-gray-500 mb-5">上传 MES 导出的 Excel 文件，批量导入历史维修关系</p>
+          <div className="relos-panel mb-6">
+            <h2 className="text-lg font-semibold text-[color:var(--t1)] mb-2">导入历史数据（可选）</h2>
+            <p className="text-sm text-[color:var(--t2)] mb-5">上传 MES 导出的 Excel 文件，批量导入历史维修关系</p>
 
             {/* 拖拽上传区 */}
             <div
-              className="border-2 border-dashed border-gray-700 rounded-xl p-8 text-center cursor-pointer hover:border-gray-500 transition-colors"
+              className="border-2 border-dashed border-[color:var(--b2)] rounded-xl p-8 text-center cursor-pointer hover:border-[color:var(--b2)] transition-colors"
               onClick={() => fileRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -362,16 +362,16 @@ export default function ExpertInit({ embedded = false }) {
                 if (file) { setUploadFile(file); handleUpload(file) }
               }}
             >
-              <Upload className="w-8 h-8 text-gray-600 mx-auto mb-3" />
+              <Upload className="w-8 h-8 text-[color:var(--t3)] mx-auto mb-3" />
               {uploadFile ? (
                 <>
-                  <p className="text-white font-medium">{uploadFile.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">{(uploadFile.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-[color:var(--t1)] font-medium">{uploadFile.name}</p>
+                  <p className="text-xs text-[color:var(--t2)] mt-1">{(uploadFile.size / 1024).toFixed(1)} KB</p>
                 </>
               ) : (
                 <>
-                  <p className="text-gray-500">拖拽 Excel 文件到此，或点击选择</p>
-                  <p className="text-xs text-gray-600 mt-1">支持 .xlsx、.xls 格式</p>
+                  <p className="text-[color:var(--t2)]">拖拽 Excel 文件到此，或点击选择</p>
+                  <p className="text-xs text-[color:var(--t3)] mt-1">支持 .xlsx、.xls 格式</p>
                 </>
               )}
               <input
@@ -387,8 +387,8 @@ export default function ExpertInit({ embedded = false }) {
             </div>
 
             {uploading && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-gray-400">
-                <div className="w-4 h-4 border-2 border-gray-600 border-t-blue-400 rounded-full animate-spin" />
+              <div className="mt-4 flex items-center gap-2 text-sm text-[color:var(--t3)]">
+                <div className="w-4 h-4 border-2 border-[color:var(--b2)] border-t-blue-400 rounded-full animate-spin" />
                 正在解析并导入...
               </div>
             )}
@@ -396,7 +396,7 @@ export default function ExpertInit({ embedded = false }) {
             {uploadResult && !uploadResult.error && (
               <div className="mt-4 bg-green-900/20 border border-green-800 rounded-lg p-3">
                 <p className="text-green-400 text-sm font-medium">导入成功</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-[color:var(--t3)] mt-1">
                   {JSON.stringify(uploadResult).slice(0, 120)}...
                 </p>
               </div>
@@ -407,18 +407,18 @@ export default function ExpertInit({ embedded = false }) {
 
             {/* 上传后澄清（阶段1/3）：MVP 先做静态问题 + 记录答案 */}
             {uploadResult && !uploadResult.error && (
-              <div className="mt-4 bg-surface rounded-xl border border-gray-700 p-4">
+              <div className="mt-4 relos-subpanel">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-white">上传后澄清（可选）</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-sm font-semibold text-[color:var(--t1)]">上传后澄清（可选）</p>
+                    <p className="text-xs text-[color:var(--t2)] mt-1">
                       先回答 2-3 个问题，系统后续可据此提升抽取质量（MVP：当前仅记录答案）
                     </p>
                   </div>
                   <button
                     onClick={loadDoc}
                     disabled={docLoading}
-                    className="px-3 py-2 rounded-lg border border-gray-700 bg-bg text-gray-200 hover:border-gray-500 disabled:opacity-40 text-sm"
+                    className="btn btn-sm"
                   >
                     {docLoading ? '加载中…' : '加载问题'}
                   </button>
@@ -430,13 +430,13 @@ export default function ExpertInit({ embedded = false }) {
 
                 {docDetail && !docDetail.error && (
                   <div className="mt-4 space-y-3">
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-[color:var(--t3)]">
                       doc：<span className="font-mono">{uploadResult.id}</span> · status：{docDetail.status}
                     </p>
 
                     {(docDetail.clarify_questions || []).map((q) => (
-                      <div key={q.question_id} className="rounded-lg border border-gray-700 bg-bg p-3">
-                        <p className="text-sm text-white">{q.prompt}</p>
+                      <div key={q.question_id} className="relos-subpanel">
+                        <p className="text-sm text-[color:var(--t1)]">{q.prompt}</p>
                         {q.type === 'single_choice' ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {(q.options || []).map((opt) => (
@@ -446,8 +446,8 @@ export default function ExpertInit({ embedded = false }) {
                                 onClick={() => setClarifyAns((a) => ({ ...a, [q.question_id]: opt.id }))}
                                 className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
                                   clarifyAns?.[q.question_id] === opt.id
-                                    ? 'border-blue-600 bg-blue-900/30 text-white'
-                                    : 'border-gray-700 bg-bg text-gray-200 hover:border-gray-500'
+                                    ? 'border-[color:var(--blue)] bg-[color:var(--blue-l)] text-[color:var(--blue-ink)]'
+                                    : 'border-[color:var(--b2)] bg-[color:var(--bg2)] text-[color:var(--t2)] hover:border-[color:var(--blue)]'
                                 }`}
                               >
                                 {opt.label}
@@ -459,7 +459,7 @@ export default function ExpertInit({ embedded = false }) {
                             value={clarifyAns?.[q.question_id] || ''}
                             onChange={(e) => setClarifyAns((a) => ({ ...a, [q.question_id]: e.target.value }))}
                             placeholder="可选填写"
-                            className="mt-2 w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                            className="relos-field mt-2"
                           />
                         )}
                       </div>
@@ -468,11 +468,11 @@ export default function ExpertInit({ embedded = false }) {
                     <button
                       onClick={submitClarify}
                       disabled={clarifySubmitting}
-                      className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold"
+                      className="btn btn-p w-full justify-center disabled:opacity-40"
                     >
                       {clarifySubmitting ? '正在提交…' : '提交澄清答案'}
                     </button>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-[color:var(--t3)]">
                       说明：若文档尚未进入 <span className="font-mono">pending_review</span>，后端会返回 400（请稍后再试）。
                     </p>
                   </div>
@@ -484,14 +484,14 @@ export default function ExpertInit({ embedded = false }) {
           <div className="flex gap-3">
             <button
               onClick={() => setStep(1)}
-              className="flex items-center gap-2 px-4 py-3 rounded-lg border border-gray-700 text-gray-400 hover:text-white transition-colors text-sm"
+              className="flex items-center gap-2 px-4 py-3 rounded-lg border border-[color:var(--b2)] text-[color:var(--t3)] hover:text-[color:var(--t1)] transition-colors text-sm"
             >
               <ChevronLeft className="w-4 h-4" /> 上一步
             </button>
             <button
               onClick={handleSubmitRelations}
               disabled={submitting}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg bg-confidence-high hover:bg-green-500 disabled:opacity-50 transition-colors font-semibold text-white"
+              className="btn btn-ok flex-1 justify-center disabled:opacity-50"
             >
               {submitting ? (
                 <>
@@ -506,7 +506,7 @@ export default function ExpertInit({ embedded = false }) {
           <button
             onClick={handleSubmitRelations}
             disabled={submitting}
-            className="w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors py-2"
+            className="w-full text-center text-sm text-[color:var(--t2)] hover:text-[color:var(--t2)] transition-colors py-2"
           >
             跳过导入，直接完成
           </button>
@@ -515,16 +515,16 @@ export default function ExpertInit({ embedded = false }) {
 
       {/* 步骤 4：完成 */}
       {step === 3 && (
-        <div className="bg-surface rounded-xl border border-gray-700 p-8 text-center">
+        <div className="relos-panel text-center">
           <CheckCircle className="w-16 h-16 text-confidence-high mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-2">初始化完成！</h2>
-          <p className="text-gray-400 mb-6">
-            已成功录入 <strong className="text-white">{relations.filter(r => r.alarm_code && r.cause).length}</strong> 条专家经验关系
+          <h2 className="text-2xl font-bold text-[color:var(--t1)] mb-2">初始化完成！</h2>
+          <p className="text-[color:var(--t3)] mb-6">
+            已成功录入 <strong className="text-[color:var(--t1)]">{relations.filter(r => r.alarm_code && r.cause).length}</strong> 条专家经验关系
             {uploadResult && !uploadResult.error && '，并完成历史数据导入'}
           </p>
 
-          <div className="bg-bg rounded-lg border border-gray-700 p-4 mb-6 text-left">
-            <p className="text-xs text-gray-500 mb-2">系统状态</p>
+          <div className="relos-subpanel mb-6 text-left">
+            <p className="text-xs text-[color:var(--t2)] mb-2">系统状态</p>
             <div className="space-y-1.5 text-sm">
               <div className="flex items-center gap-2 text-green-400">
                 <CheckCircle className="w-4 h-4" />
@@ -539,7 +539,7 @@ export default function ExpertInit({ embedded = false }) {
 
           <button
             onClick={() => window.location.href = '/alarm'}
-            className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors font-semibold text-white"
+            className="btn btn-p w-full justify-center"
           >
             开始验证 → 去分析告警
           </button>

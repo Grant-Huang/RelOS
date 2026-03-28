@@ -1,79 +1,80 @@
 /**
- * 工作台侧栏：运行时 / 知识训练 / 系统 —— 对齐 relos_workbench_v2.html IA
+ * 侧栏：与 docs/relos_workbench_v2.html 侧栏结构、文案、圆点样式一致
  */
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Activity,
-  ClipboardCheck,
-  BookOpen,
-  UserCog,
-  Files,
-  Database,
-  Bell,
-  Factory,
-  TrendingUp,
-} from 'lucide-react'
+import ThemeSwitch from './ThemeSwitch'
 
-function NavItem({ to, end, icon: Icon, label, onNavigate }) {
+function NavBtn({ to, end, dotClass, children }) {
   return (
-    <NavLink
-      to={to}
-      end={end}
-      onClick={() => onNavigate?.()}
-      className={({ isActive }) => `wb-nav-item ${isActive ? 'wb-nav-item-active' : ''}`}
-    >
-      <Icon className="w-4 h-4 flex-shrink-0 opacity-80" />
-      {label}
+    <NavLink to={to} end={end} className={({ isActive }) => `nb${isActive ? ' act' : ''}`}>
+      <span className={`nb-dot ${dotClass}`} />
+      {children}
     </NavLink>
   )
 }
 
-export default function WorkbenchSidebar({ className = '', onNavigate }) {
+export default function WorkbenchSidebar() {
   return (
-    <aside className={`wb-sidebar w-[200px] flex-shrink-0 flex flex-col ${className}`}>
-      <div className="px-3.5 py-3 wb-sidebar-logo-border">
-        <p className="text-sm font-semibold" style={{ color: 'var(--wb-text)' }}>
-          RelOS 知识工作台
-        </p>
-        <p className="text-[10px] wb-text-muted mt-0.5">v2 · 运行时 + 知识训练</p>
+    <div className="side">
+      <div className="logo">
+        <div className="logo-n">RelOS 知识工作台</div>
+        <div className="logo-s">v2.0 · 双前端设计审查</div>
       </div>
 
-      <nav className="flex-1 px-2 py-2 overflow-y-auto">
-        <div className="wb-nav-group flex items-center gap-1.5">
-          用户前端 <span className="wb-badge-runtime">运行时</span>
-        </div>
-        <div className="space-y-0.5 mb-3">
-          <NavItem to="/runtime/dashboard" end icon={LayoutDashboard} label="运行时仪表盘" onNavigate={onNavigate} />
-          <NavItem to="/runtime/automation" icon={Activity} label="自动标注监控" onNavigate={onNavigate} />
-          <NavItem to="/runtime/prompt" icon={ClipboardCheck} label="提示标注工作区" onNavigate={onNavigate} />
-        </div>
-
-        <div className="wb-nav-group flex items-center gap-1.5">
-          专家/管理员 <span className="wb-badge-train">知识训练</span>
-        </div>
-        <div className="space-y-0.5 mb-3">
-          <NavItem to="/knowledge/public" icon={BookOpen} label="公开知识标注" onNavigate={onNavigate} />
-          <NavItem to="/knowledge/expert" icon={UserCog} label="专家知识采集" onNavigate={onNavigate} />
-          <NavItem to="/knowledge/documents" icon={Files} label="企业文档标注" onNavigate={onNavigate} />
-        </div>
-
-        <div className="wb-nav-group">系统监控</div>
-        <div className="space-y-0.5 mb-3">
-          <NavItem to="/system/kb-status" icon={Database} label="知识库状态" onNavigate={onNavigate} />
-        </div>
-
-        <div className="wb-nav-group">分析与演示</div>
-        <div className="space-y-0.5">
-          <NavItem to="/alarm" icon={Bell} label="告警分析" onNavigate={onNavigate} />
-          <NavItem to="/line-efficiency" icon={Factory} label="产线效率" onNavigate={onNavigate} />
-          <NavItem to="/strategic-sim" icon={TrendingUp} label="战略模拟" onNavigate={onNavigate} />
-        </div>
-      </nav>
-
-      <div className="px-3.5 py-2.5 text-[10px] wb-text-muted border-t wb-sidebar-logo-border">
-        MVP · 易用性优先
+      <div className="grp">
+        用户前端 <span className="grp-badge gb-u">运行时</span>
       </div>
-    </aside>
+      <NavBtn to="/runtime/dashboard" end dotClass="s-on">
+        运行时仪表盘
+      </NavBtn>
+      <NavBtn to="/runtime/automation" dotClass="s-on">
+        自动标注监控
+      </NavBtn>
+      <NavBtn to="/runtime/prompt" dotClass="s-mid">
+        提示标注工作区
+      </NavBtn>
+
+      <div className="grp">
+        专家/管理员 <span className="grp-badge gb-a">知识训练</span>
+      </div>
+      <NavBtn to="/knowledge/public" dotClass="s-off">
+        公开知识标注
+      </NavBtn>
+      <NavBtn to="/knowledge/expert" dotClass="s-off">
+        专家知识采集
+      </NavBtn>
+      <NavBtn to="/knowledge/documents" dotClass="s-off">
+        企业文档标注
+      </NavBtn>
+
+      <div className="grp">系统监控</div>
+      <NavBtn to="/system/kb-status" dotClass="s-on">
+        知识库状态
+      </NavBtn>
+
+      <div className="grp">分析与演示</div>
+      <NavBtn to="/alarm" dotClass="s-mid">
+        告警分析
+      </NavBtn>
+      <NavBtn to="/line-efficiency" dotClass="s-mid">
+        产线效率
+      </NavBtn>
+      <NavBtn to="/strategic-sim" dotClass="s-mid">
+        战略模拟
+      </NavBtn>
+
+      <div style={{ flex: 1 }} />
+      <ThemeSwitch />
+      <div
+        style={{
+          padding: '10px 14px',
+          fontSize: 10,
+          color: 'var(--t3)',
+          borderTop: '0.5px solid var(--b1)',
+        }}
+      >
+        v2 · 2026.03 · 双前端审查版
+      </div>
+    </div>
   )
 }

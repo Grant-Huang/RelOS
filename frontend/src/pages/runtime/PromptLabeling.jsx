@@ -1,46 +1,10 @@
 /**
- * 提示标注工作区：置信度 0.50–0.79 · POST /relations/{id}/feedback
+ * 提示标注工作区 — 对齐 docs/relos_workbench_v2.html #v-rt-prompt
+ * chip 筛选 + ann-card 队列 + POST /relations/{id}/feedback
  */
-import { useEffect, useState } from 'react'
-import { ClipboardCheck, RefreshCw, Filter, AlertTriangle, CheckCircle } from 'lucide-react'
-import RelationCard from '../../components/RelationCard'
+import { useEffect, useMemo, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { listPendingRelations, submitRelationFeedback } from '../../api/client'
-
-const MOCK_RELATIONS = [
-  {
-    id: 'rel-mock-1',
-    relation_type: 'ALARM__INDICATES__COMPONENT_FAILURE',
-    source_node_id: 'alarm-VIB-001',
-    target_node_id: '轴承磨损',
-    confidence: 0.58,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: '2024年12月维修记录：1号机振动报警，经检查发现主轴轴承磨损严重，更换后恢复正常。',
-    created_at: '2024-12-15T10:30:00Z',
-  },
-  {
-    id: 'rel-mock-2',
-    relation_type: 'ALARM__INDICATES__COMPONENT_FAILURE',
-    source_node_id: 'alarm-TEMP-002',
-    target_node_id: '电机绕组过热',
-    confidence: 0.62,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: '设备维保手册第7章：温度告警通常与电机绕组绝缘老化或冷却系统失效相关。',
-    created_at: '2025-01-10T08:15:00Z',
-  },
-  {
-    id: 'rel-mock-3',
-    relation_type: 'DEVICE__TRIGGERS__ALARM',
-    source_node_id: 'device-M3',
-    target_node_id: 'alarm-WELD-003',
-    confidence: 0.71,
-    provenance: 'llm_extracted',
-    status: 'pending_review',
-    source_text: 'M3焊接机近半年告警记录分析：过热告警占比67%，主要集中在夜班操作期间。',
-    created_at: '2025-02-20T14:00:00Z',
-  },
-]
 
 const ENGINEER_KEY = 'relos_engineer_id'
 
@@ -48,12 +12,41 @@ function inPromptRange(c) {
   return c >= 0.5 && c <= 0.79
 }
 
+function relationCategory(rel) {
+  const t = `${rel.relation_type || ''} ${rel.source_text || ''} ${rel.source_node_id || ''} ${rel.target_node_id || ''}`.toUpperCase()
+  if (t.includes('WORKORDER') || t.includes('工单') || t.includes('WO')) return 'wo'
+  if (
+    t.includes('QUALITY') ||
+    t.includes('DEFECT') ||
+    t.includes('BATCH') ||
+    t.includes('质量') ||
+    t.includes('工艺') ||
+    t.includes('PROCESS')
+  )
+    return 'quality'
+  if (t.includes('ALARM') || t.includes('报警') || t.includes('告警')) return 'alarm'
+  return 'alarm'
+}
+
+function shortRelationName(relType) {
+  if (!relType) return '—'
+  const parts = relType.split('__')
+  if (parts.length >= 3) return parts[1]
+  return relType.replace(/_/g, ' ').slice(0, 16)
+}
+
+function whyText(rel) {
+  const c = Number(rel.confidence)
+  if (c < 0.65) return '证据不足或观测次数少'
+  if (c < 0.75) return '与历史案例部分匹配'
+  return '间接影响，置信度中等'
+}
+
 export default function PromptLabeling() {
   const [relations, setRelations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [useMock, setUseMock] = useState(false)
-  const [filterMode, setFilterMode] = useState('prompt')
-  const [sortBy, setSortBy] = useState('confidence_asc')
+  const [loadError, setLoadError] = useState(null)
+  const [filterCat, setFilterCat] = useState('all')
   const [processed, setProcessed] = useState(new Set())
   const [engineerId, setEngineerId] = useState(() => {
     try {
@@ -73,19 +66,17 @@ export default function PromptLabeling() {
 
   const load = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const data = await listPendingRelations(80)
       const items = Array.isArray(data) ? data : []
+      setRelations(items)
       if (items.length === 0) {
-        setRelations(MOCK_RELATIONS)
-        setUseMock(true)
-      } else {
-        setRelations(items)
-        setUseMock(false)
+        setLoadError(null)
       }
-    } catch {
-      setRelations(MOCK_RELATIONS)
-      setUseMock(true)
+    } catch (e) {
+      setRelations([])
+      setLoadError(e.message || '加载待审队列失败，请确认后端与 Neo4j 已启动。')
     } finally {
       setLoading(false)
     }
@@ -95,129 +86,178 @@ export default function PromptLabeling() {
     load()
   }, [])
 
-  const sorted = [...relations].sort((a, b) => {
-    if (sortBy === 'confidence_asc') return a.confidence - b.confidence
-    if (sortBy === 'confidence_desc') return b.confidence - a.confidence
-    return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-  })
+  const pool = useMemo(() => {
+    return relations.filter((r) => !processed.has(r.id) && inPromptRange(Number(r.confidence)))
+  }, [relations, processed])
 
-  const visible = sorted.filter((r) => {
-    if (processed.has(r.id)) return false
-    if (filterMode === 'prompt') return inPromptRange(Number(r.confidence))
-    return true
-  })
+  const counts = useMemo(() => {
+    const c = { all: 0, alarm: 0, quality: 0, wo: 0 }
+    pool.forEach((r) => {
+      c.all += 1
+      const cat = relationCategory(r)
+      if (cat === 'alarm') c.alarm += 1
+      else if (cat === 'quality') c.quality += 1
+      else if (cat === 'wo') c.wo += 1
+    })
+    return c
+  }, [pool])
 
-  const outOfRange = sorted.filter((r) => !inPromptRange(Number(r.confidence)) && !processed.has(r.id))
+  const visible = useMemo(() => {
+    if (filterCat === 'all') return pool
+    return pool.filter((r) => relationCategory(r) === filterCat)
+  }, [pool, filterCat])
 
   const doFeedback = async (id, confirmed) => {
-    if (!useMock) {
-      try {
-        await submitRelationFeedback(id, { engineer_id: engineerId, confirmed })
-      } catch {
-        /* 仍标记本地已处理，避免卡住 */
-      }
+    try {
+      await submitRelationFeedback(id, { engineer_id: engineerId, confirmed })
+    } catch {
+      /* 仍标记本地已处理，避免界面卡住 */
     }
     setProcessed((prev) => new Set([...prev, id]))
   }
 
-  const handleUnsure = (id) => {
-    setProcessed((prev) => new Set([...prev, id]))
+  const approveAll = async () => {
+    if (visible.length === 0) return
+    const ids = visible.map((r) => r.id)
+    if (!window.confirm(`将确认并反馈 ${ids.length} 条关系，是否继续？`)) return
+    for (const id of ids) {
+      try {
+        await submitRelationFeedback(id, { engineer_id: engineerId, confirmed: true })
+      } catch {
+        /* 仍合并进已处理 */
+      }
+    }
+    setProcessed((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.add(id))
+      return next
+    })
   }
 
+  const skipAll = () => {
+    if (visible.length === 0) return
+    setProcessed((prev) => {
+      const next = new Set(prev)
+      visible.forEach((r) => next.add(r.id))
+      return next
+    })
+  }
+
+  const chipCls = (cat) => `chip${filterCat === cat ? ' on' : ''}`
+
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <ClipboardCheck className="w-6 h-6" style={{ color: 'var(--wb-amber)' }} />
-          <div>
-            <h1 className="text-xl md:text-2xl font-semibold" style={{ color: 'var(--wb-text)' }}>
-              提示标注工作区
-            </h1>
-            <p className="text-sm wb-text-muted">置信度 0.50–0.79 · 每次确认触发 Relation Core 更新</p>
-          </div>
+    <div className="relos-page">
+      <h2>
+        提示标注工作区 <span className="badge b-amber">置信度 0.50–0.79 · 需人工确认</span>
+      </h2>
+      <div className="muted mb12">以下关系系统无法自信地判断，请您结合现场经验确认。每次确认都会强化系统的学习。</div>
+
+      <div className="card mb10">
+        <div className="muted" style={{ marginBottom: 6 }}>
+          操作员工号（用于反馈审计）
         </div>
-        <button type="button" onClick={load} disabled={loading} className="wb-btn-ghost flex items-center gap-2 self-start min-h-[44px]">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          刷新
+        <input type="text" value={engineerId} onChange={(e) => setEngineerId(e.target.value)} placeholder="operator-1" style={{ maxWidth: 220 }} />
+        <button type="button" className="btn btn-sm" style={{ marginLeft: 8 }} onClick={load} disabled={loading}>
+          <RefreshCw style={{ width: 12, height: 12 }} /> 刷新队列
         </button>
       </div>
 
-      <div className="wb-card p-4 mb-5 space-y-3">
-        <label className="block text-xs wb-text-muted">操作员工号（用于反馈审计）</label>
-        <input
-          className="wb-input max-w-xs min-h-[44px]"
-          value={engineerId}
-          onChange={(e) => setEngineerId(e.target.value)}
-          placeholder="operator-1"
-        />
-      </div>
-
-      {useMock && (
-        <div className="mb-5 wb-card p-3 flex items-center gap-2" style={{ borderColor: 'var(--wb-blue)' }}>
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--wb-blue)' }} />
-          <p className="text-sm wb-text-secondary">演示数据（后端无待审核关系或请求失败）</p>
+      {loadError ? (
+        <div className="card mb10" style={{ borderColor: 'var(--red)', background: 'var(--red-l)' }}>
+          <p style={{ fontSize: 12, color: 'var(--red)', margin: 0 }}>{loadError}</p>
         </div>
-      )}
+      ) : null}
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 wb-text-muted" />
-          <select
-            value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value)}
-            className="wb-select w-auto min-h-[44px] text-sm"
-          >
-            <option value="prompt">仅提示区（0.50–0.79）</option>
-            <option value="all">全部待审核（高级）</option>
-          </select>
-        </div>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="wb-select w-auto min-h-[44px] text-sm"
-        >
-          <option value="confidence_asc">置信度从低到高</option>
-          <option value="confidence_desc">置信度从高到低</option>
-          <option value="time_desc">最新优先</option>
-        </select>
-        <span className="text-sm wb-text-muted">
-          队列中 <strong style={{ color: 'var(--wb-text)' }}>{visible.length}</strong> 条
-        </span>
-      </div>
-
-      {filterMode === 'prompt' && outOfRange.length > 0 && (
-        <p className="text-xs wb-text-muted mb-4">
-          另有 {outOfRange.length} 条置信度不在提示区，切换「全部待审核」可处理。
-        </p>
-      )}
-
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="wb-card h-36 animate-pulse" />
-          ))}
-        </div>
-      ) : visible.length > 0 ? (
-        <div className="space-y-4">
-          {visible.map((rel) => (
-            <RelationCard
-              key={rel.id}
-              relation={rel}
-              onApprove={(id) => doFeedback(id, true)}
-              onReject={(id) => doFeedback(id, false)}
-              onUnsure={(id) => handleUnsure(id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-16 wb-card">
-          <CheckCircle className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--wb-green)' }} />
-          <p className="font-medium" style={{ color: 'var(--wb-text)' }}>
-            提示区内暂无待处理项
+      {!loading && !loadError && relations.length === 0 ? (
+        <div className="card mb10">
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+            当前没有 pending_review 关系。请运行 <code style={{ fontSize: 11 }}>python scripts/seed_demo_scenarios.py</code>{' '}
+           （需先执行 seed_neo4j）以注入演示待审数据。
           </p>
-          <p className="text-sm wb-text-muted mt-1">可切换筛选或等待新任务</p>
         </div>
-      )}
+      ) : null}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <span className="muted">筛选：</span>
+        <div id="ann-filter">
+          <span role="button" tabIndex={0} className={chipCls('all')} onClick={() => setFilterCat('all')} onKeyDown={(e) => e.key === 'Enter' && setFilterCat('all')}>
+            全部 ({counts.all})
+          </span>
+          <span role="button" tabIndex={0} className={chipCls('alarm')} onClick={() => setFilterCat('alarm')} onKeyDown={(e) => e.key === 'Enter' && setFilterCat('alarm')}>
+            报警类 ({counts.alarm})
+          </span>
+          <span role="button" tabIndex={0} className={chipCls('quality')} onClick={() => setFilterCat('quality')} onKeyDown={(e) => e.key === 'Enter' && setFilterCat('quality')}>
+            质量类 ({counts.quality})
+          </span>
+          <span role="button" tabIndex={0} className={chipCls('wo')} onClick={() => setFilterCat('wo')} onKeyDown={(e) => e.key === 'Enter' && setFilterCat('wo')}>
+            工单类 ({counts.wo})
+          </span>
+        </div>
+        <div style={{ flex: 1 }} />
+        <button type="button" className="btn btn-sm btn-ok" onClick={approveAll}>
+          全部确认
+        </button>
+        <button type="button" className="btn btn-sm" onClick={skipAll}>
+          跳过全部
+        </button>
+      </div>
+
+      <div id="ann-queue">
+        {loading ? (
+          <div className="muted" style={{ textAlign: 'center', padding: 20 }}>
+            加载中…
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="muted" style={{ textAlign: 'center', padding: 20 }}>
+            {pool.length === 0 ? '提示区内暂无待处理项（或已全部处理）' : '当前筛选下无待处理项'}
+          </div>
+        ) : (
+          visible.map((a) => {
+            const c = Number(a.confidence)
+            const cat = relationCategory(a)
+            const catLabel = cat === 'alarm' ? '报警类' : cat === 'quality' ? '质量类' : '工单类'
+            const badgeCls = c < 0.65 ? 'b-red' : c < 0.75 ? 'b-amber' : 'b-blue'
+            const cfCls = c < 0.65 ? 'cf-low' : c < 0.75 ? 'cf-mid' : 'cf-high'
+            const src = a.provenance_detail || a.source_text || `${a.provenance || '图谱'} · 待审核`
+            return (
+              <div key={a.id} className="ann-card" id={`ac-${a.id}`}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className={`badge ${badgeCls}`}>{c.toFixed(2)} 置信度</span>
+                    <span className="badge b-gray">{catLabel}</span>
+                  </div>
+                  <span style={{ fontSize: 10, color: 'var(--t3)' }}>不确定原因：{whyText(a)}</span>
+                </div>
+                <div className="ann-src" style={{ marginBottom: 8 }}>
+                  来源：{src}
+                </div>
+                <div className="rrow" style={{ marginBottom: 8 }}>
+                  <span className="rnode">{a.source_node_id}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t2)' }}>→ {shortRelationName(a.relation_type)} →</span>
+                  <span className="rnode">{a.target_node_id}</span>
+                  <div className="cbar" style={{ flex: 1 }}>
+                    <div className={`cfill ${cfCls}`} style={{ width: `${c * 100}%` }} />
+                  </div>
+                </div>
+                <div className="ann-actions">
+                  <button type="button" className="btn btn-ok btn-sm" onClick={() => doFeedback(a.id, true)}>
+                    ✓ 正确，写入
+                  </button>
+                  <button type="button" className="btn btn-no btn-sm" onClick={() => doFeedback(a.id, false)}>
+                    ✗ 错误
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => window.alert('请在后续版本中选择正确关系类型')}>
+                    ✎ 修改关系类型
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => setProcessed((p) => new Set([...p, a.id]))}>
+                    跳过
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
     </div>
   )
 }

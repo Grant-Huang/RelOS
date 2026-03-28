@@ -34,10 +34,10 @@ export default function KBStatus() {
   const msg = (m) => setToast({ m, k: Date.now() })
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} />}
 
-      <h2 className="page-h2">
+      <h2>
         知识库状态
         <span className="badge b-green">● 运行中</span>
       </h2>
@@ -50,9 +50,9 @@ export default function KBStatus() {
           { v: '234',    l: '待审核关系',   c: 'var(--amber)' },
           { v: '89',     l: '已衰减废弃',   c: 'var(--t2)'    },
         ].map(s => (
-          <div className="stat-card" key={s.l}>
-            <div className="stat-value" style={{ color: s.c }}>{s.v}</div>
-            <div className="stat-label">{s.l}</div>
+          <div className="stat" key={s.l}>
+            <div className="stat-v" style={{ color: s.c }}>{s.v}</div>
+            <div className="stat-l">{s.l}</div>
           </div>
         ))}
       </div>
@@ -111,7 +111,7 @@ export default function KBStatus() {
         <h3 style={{ fontSize: 12, fontWeight: 500, margin: '0 0 8px' }}>三层知识结构健康度</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 8 }}>
           {LAYERS.map(l => (
-            <div className="stat-card" key={l.name} style={{ borderLeft: `3px solid ${l.color}` }}>
+            <div className="stat" key={l.name} style={{ borderLeft: `3px solid ${l.color}` }}>
               <div style={{ fontSize: 11, fontWeight: 500, color: l.color, marginBottom: 6 }}>{l.name}</div>
               <div style={{ fontSize: 19, fontWeight: 500, marginBottom: 3 }}>{l.count}</div>
               <div className="muted" style={{ fontSize: 10 }}>覆盖率：{l.cov}</div>

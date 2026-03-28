@@ -55,10 +55,10 @@ export default function HITLQueue() {
   )
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} color={toast.c} />}
 
-      <h2 className="page-h2">
+      <h2>
         提示标注工作区
         <span className="badge b-amber">置信度 0.50–0.79 · 需人工确认</span>
       </h2>

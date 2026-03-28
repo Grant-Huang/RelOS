@@ -47,10 +47,10 @@ export default function PublicKnowledge() {
   }
 
   return (
-    <div style={{ padding: '16px 20px' }}>
+    <div className="relos-page">
       {toast && <Toast key={toast.k} msg={toast.m} color={toast.c} />}
 
-      <h2 className="page-h2">
+      <h2>
         公开知识标注
         <span className="layer-pill lp1">知识层 1 · Public Knowledge</span>
       </h2>

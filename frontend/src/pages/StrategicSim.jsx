@@ -8,15 +8,6 @@ import ConfidenceBar from '../components/ConfidenceBar'
 
 const RISK_LABEL = { high: '高风险', medium: '中等风险', low: '可接受' }
 
-const MOCK_RESOURCES = {
-  recommendations: [
-    { rank: 1, resource_name: '设备维护团队', roi_pct: 35, investment_rmb: 360000, impact_description: '可减少交付延误 41%' },
-    { rank: 2, resource_name: '供应商管理专员', roi_pct: 28, investment_rmb: 180000, impact_description: '可减少交付延误 31%' },
-    { rank: 3, resource_name: '夜班专项培训', roi_pct: 22, investment_rmb: 80000, impact_description: '可提升夜班效率 35%' },
-  ],
-  priority_action: '优先投入：设备维护团队（ROI 最高，预计 8 个月回本）',
-}
-
 function RiskChangeRow({ label, change, last }) {
   const isRise = change > 0
   const color = isRise ? 'var(--red)' : 'var(--green)'
@@ -44,32 +35,18 @@ export default function StrategicSim() {
   const [resources, setResources] = useState(null)
   const [loading, setLoading] = useState(false)
   const [resLoading, setResLoading] = useState(false)
+  const [simError, setSimError] = useState(null)
+  const [resError, setResError] = useState(null)
 
   const runSim = useCallback(async () => {
     setLoading(true)
+    setSimError(null)
     try {
       const data = await runStrategicSimulation(expansion)
       setSimResult(data)
-    } catch {
-      setSimResult({
-        expansion_pct: expansion,
-        delivery_risk_change_pct: +(expansion * 0.9).toFixed(1),
-        failure_rate_change_pct: +(expansion * 0.6).toFixed(1),
-        quality_risk_change_pct: +(expansion * 0.4).toFixed(1),
-        risk_level: expansion > 25 ? 'high' : expansion > 15 ? 'medium' : 'low',
-        causal_chain: [
-          `订单量 +${expansion}%`,
-          `产线负载：70% → ${Math.min(99, 70 + expansion * 0.7).toFixed(0)}%（+${(expansion * 0.7).toFixed(0)}%）`,
-          `设备故障率预计上升 ${(expansion * 0.6).toFixed(0)}%（弹性系数 1.8）`,
-          `质量缺陷率预计上升 ${(expansion * 0.4).toFixed(0)}%`,
-          `交付风险综合上升 ${(expansion * 0.9).toFixed(0)}%`,
-        ],
-        recommendations: [
-          '建议扩产前完成 M3 维修保养（消除当前 18.5h/周停机隐患）',
-          '将供应商 A 准时率提升至 80% 以上，否则扩产后缺料风险翻倍',
-          '夜班增配有经验维修工',
-        ],
-      })
+    } catch (e) {
+      setSimResult(null)
+      setSimError(e.message || '战略模拟请求失败，请检查后端与 Neo4j。')
     } finally {
       setLoading(false)
     }
@@ -77,11 +54,13 @@ export default function StrategicSim() {
 
   const loadResources = async () => {
     setResLoading(true)
+    setResError(null)
     try {
       const data = await getResourceOptimization()
       setResources(data)
-    } catch {
-      setResources(MOCK_RESOURCES)
+    } catch (e) {
+      setResources(null)
+      setResError(e.message || '加载资源配置失败。')
     } finally {
       setResLoading(false)
     }
@@ -162,6 +141,11 @@ export default function StrategicSim() {
                 </>
               )}
             </button>
+            {simError ? (
+              <p className="muted mt8" style={{ color: 'var(--red)', fontSize: 12 }}>
+                {simError}
+              </p>
+            ) : null}
           </div>
 
           {simResult && (
@@ -261,9 +245,24 @@ export default function StrategicSim() {
 
           {resLoading && <p className="muted">加载中…</p>}
 
-          {resources && (
+          {resError ? (
+            <div className="card mb12" style={{ borderColor: 'var(--red)', background: 'var(--red-l)' }}>
+              <p style={{ fontSize: 12, color: 'var(--red)', margin: 0 }}>{resError}</p>
+            </div>
+          ) : null}
+
+          {resources && (!resources.recommendations || resources.recommendations.length === 0) ? (
+            <div className="card mb12">
+              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+                当前图谱中无 ISSUE__REQUIRES__RESOURCE 等资源优化关系。开发环境可运行{' '}
+                <code style={{ fontSize: 11 }}>python scripts/seed_demo_scenarios.py</code> 注入演示数据。
+              </p>
+            </div>
+          ) : null}
+
+          {resources && resources.recommendations?.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {resources.recommendations?.map((rec) => (
+              {resources.recommendations.map((rec) => (
                 <div key={rec.rank} className="card">
                   <div className="rrow" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
                     <div style={{ flex: 1, minWidth: 160 }}>
@@ -304,7 +303,7 @@ export default function StrategicSim() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

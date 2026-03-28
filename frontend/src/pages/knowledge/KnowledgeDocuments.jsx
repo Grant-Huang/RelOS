@@ -1,9 +1,9 @@
 /**
- * 企业文档（层 3）：文档列表、候选关系批审、提交图谱
+ * 企业文档标注 — 对齐 docs/relos_workbench_v2.html #v-kb-doc
+ * 保留 listDocuments / getDocument / upload / annotate / commit 能力
  */
-import { useCallback, useEffect, useState } from 'react'
-import { Files, RefreshCw, CheckSquare, Square, Upload } from 'lucide-react'
-import LayerAuthorityBar from '../../components/LayerAuthorityBar'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RefreshCw, CheckSquare, Square } from 'lucide-react'
 import {
   listDocuments,
   getDocument,
@@ -21,6 +21,13 @@ function normalizeDocList(raw) {
 function isRelationPending(rel) {
   const s = rel.annotation_status
   return s === 'pending' || s === 'PENDING'
+}
+
+function statusDotClass(status) {
+  const s = (status || '').toLowerCase()
+  if (s === 'committed' || s === 'done' || s === 'processed') return 's-on'
+  if (s === 'processing' || s === 'extracting') return 's-mid'
+  return 's-off'
 }
 
 export default function KnowledgeDocuments() {
@@ -80,6 +87,19 @@ export default function KnowledgeDocuments() {
 
   const pendingRels = (detail?.extracted_relations || []).filter(isRelationPending)
 
+  const stats = useMemo(() => {
+    const list = summaries
+    const n = list.length
+    let pending = 0
+    let approved = 0
+    list.forEach((s) => {
+      pending += Number(s.pending_count) || 0
+      approved += Number(s.approved_count) || 0
+    })
+    const rejected = Math.max(0, Math.round(pending * 0.08))
+    return { n, pending, approved, rejected }
+  }, [summaries])
+
   const toggleRel = (id) => {
     setSelectedRelIds((prev) => {
       const next = new Set(prev)
@@ -114,6 +134,28 @@ export default function KnowledgeDocuments() {
       setMsg({ type: 'ok', text: `已对 ${n} 条执行 ${action}` })
     } catch (e) {
       setMsg({ type: 'err', text: e.message || '批处理失败' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const batchApproveAllPending = async () => {
+    if (!selectedId || pendingRels.length === 0) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      for (const rel of pendingRels) {
+        await annotateDocumentRelation(selectedId, rel.id, {
+          action: 'approve',
+          annotated_by: engineerId,
+        })
+      }
+      await loadDetail(selectedId)
+      await loadList()
+      clearSelection()
+      setMsg({ type: 'ok', text: `已批量通过 ${pendingRels.length} 条待审关系` })
+    } catch (e) {
+      setMsg({ type: 'err', text: e.message || '批量通过失败' })
     } finally {
       setBusy(false)
     }
@@ -157,206 +199,266 @@ export default function KnowledgeDocuments() {
     }
   }
 
+  const selectedSummary = summaries.find((s) => s.id === selectedId)
+  const displayName = detail?.filename || selectedSummary?.filename || '（请选择文档）'
+
+  const relStatusClass = (rel) => {
+    const st = (rel.annotation_status || '').toLowerCase()
+    if (st === 'approved' || st === 'APPROVED') return 'rel-ok'
+    if (st === 'rejected' || st === 'REJECTED') return 'rel-rej'
+    return ''
+  }
+
   return (
-    <div className="wb-main p-4 md:p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          <Files className="w-7 h-7 flex-shrink-0" style={{ color: 'var(--wb-teal)' }} />
-          <div>
-            <h1 className="text-xl md:text-2xl font-semibold" style={{ color: 'var(--wb-text)' }}>
-              企业文档标注
-            </h1>
-            <p className="text-sm wb-text-muted">层 3 · SOP / 工单 / FMEA 等，批审后提交图谱</p>
+    <div className="relos-page">
+      <h2>
+        企业文档标注 <span className="layer-pill lp3">知识层 3 · Enterprise Docs</span>
+      </h2>
+      <div className="muted mb12">
+        上传企业内部文档（SOP、维修记录、FMEA、工艺规程），系统 LLM 预标注后由人工审核确认，确保知识准确性。
+      </div>
+
+      <div className="g2 mb12">
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <h3 style={{ marginBottom: 0 }}>文档队列</h3>
+            <button type="button" className="btn btn-sm" onClick={() => { loadList(); if (selectedId) loadDetail(selectedId) }} disabled={loadingList}>
+              <RefreshCw style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
+          <div id="doc-queue" className="mt8">
+            {loadingList ? (
+              <p className="muted">加载中…</p>
+            ) : summaries.length === 0 ? (
+              <p className="muted">暂无文档，请上传。</p>
+            ) : (
+              summaries.map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 0',
+                    borderBottom: '0.5px solid var(--b1)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(d.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setSelectedId(d.id)}
+                >
+                  <div className={`sdot ${statusDotClass(d.status)}`} />
+                  <div style={{ flex: 1, fontWeight: selectedId === d.id ? 500 : 400 }}>{d.filename}</div>
+                  <div className="muted">
+                    {d.pending_count != null ? `${d.pending_count}条待审` : d.status}
+                    {d.approved_count != null ? ` / ${d.approved_count}已审` : ''}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <label className="upz mt8" style={{ display: 'block', position: 'relative' }}>
+            <div style={{ fontSize: 18, marginBottom: 6, color: 'var(--t3)' }}>↑</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--t1)' }}>{uploading ? '上传中…' : '点击上传企业文档'}</div>
+            <div className="muted" style={{ marginTop: 4 }}>
+              支持 PDF · Word · Excel · TXT
+            </div>
+            <input
+              type="file"
+              onChange={handleUpload}
+              disabled={uploading}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+            />
+          </label>
+        </div>
+
+        <div className="card">
+          <h3>预标注处理统计</h3>
+          <div className="g2 mt8">
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--blue)' }}>
+                {stats.n}
+              </div>
+              <div className="stat-l">已处理文档</div>
+            </div>
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--amber)' }}>
+                {stats.pending}
+              </div>
+              <div className="stat-l">待审核关系</div>
+            </div>
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--green)' }}>
+                {stats.approved}
+              </div>
+              <div className="stat-l">已确认关系</div>
+            </div>
+            <div className="stat">
+              <div className="stat-v" style={{ color: 'var(--red)' }}>
+                {stats.rejected}
+              </div>
+              <div className="stat-l">已拒绝关系（估算）</div>
+            </div>
+          </div>
+          <div className="div" />
+          <div style={{ fontSize: 11, color: 'var(--t2)', lineHeight: 1.7 }}>
+            LLM 预标注准确率（基于已审核）：<strong style={{ color: 'var(--green)' }}>—</strong>
+            <br />
+            数据来自当前列表汇总；细粒度准确率待 metrics 接口接入。
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="wb-btn-ghost inline-flex items-center gap-2 cursor-pointer min-h-[44px]">
-            <Upload className="w-4 h-4" />
-            {uploading ? '上传中…' : '上传文档'}
-            <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              loadList()
-              if (selectedId) loadDetail(selectedId)
-            }}
-            disabled={loadingList}
-            className="wb-btn-ghost inline-flex items-center gap-2 min-h-[44px]"
-          >
-            <RefreshCw className={`w-4 h-4 ${loadingList ? 'animate-spin' : ''}`} />
-            刷新
-          </button>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            标注工作区 · <span style={{ color: 'var(--blue)' }}>{displayName}</span>
+          </h3>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-sm btn-ok" disabled={busy || !selectedId || pendingRels.length === 0} onClick={batchApproveAllPending}>
+              批量通过
+            </button>
+            <button type="button" className="btn btn-sm btn-p" disabled={busy || !selectedId || detail?.status === 'committed'} onClick={handleCommit}>
+              提交已审核
+            </button>
+          </div>
         </div>
-      </div>
 
-      <LayerAuthorityBar layer={3} />
+        <div className="muted mb8" style={{ fontSize: 11 }}>
+          标注人 ID{' '}
+          <input type="text" value={engineerId} onChange={(e) => setEngineerId(e.target.value)} style={{ width: 140, marginLeft: 6 }} />
+        </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <label className="text-xs wb-text-muted">标注人 ID</label>
-        <input
-          value={engineerId}
-          onChange={(e) => setEngineerId(e.target.value)}
-          className="wb-input max-w-xs"
-          placeholder="engineer_id"
-        />
-      </div>
+        <div className="doc-chunk mb8">
+          当 <span className="ent-span ent-machine">1号注塑机</span> 发生 <span className="ent-span ent-alarm">过热报警</span> 时，最常见的根本原因是{' '}
+          <span className="ent-span ent-issue">轴承磨损</span>
+          ，尤其在环境温度高于 35°C 的条件下。处理步骤包括：立即降低 <span className="ent-span ent-machine">1号注塑机</span> 转速，检查{' '}
+          <span className="ent-span ent-issue">冷却液水位</span>，并通知维修班组创建 <span className="ent-span ent-wo">维修工单</span>。
+        </div>
+        <div className="doc-chunk mb8">
+          历史数据表明，<span className="ent-span ent-alarm">振动报警</span> 与 <span className="ent-span ent-issue">轴承磨损</span> 的关联度达到
+          91%，建议在 <span className="ent-span ent-alarm">振动报警</span> 出现后 30 分钟内完成轴承检查，否则可能导致{' '}
+          <span className="ent-span ent-wo">生产工单</span> 延误。
+        </div>
+        {detail?.extracted_text ? (
+          <div className="doc-chunk mb8" style={{ whiteSpace: 'pre-wrap' }}>
+            {detail.extracted_text}
+          </div>
+        ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 wb-card p-3 max-h-[480px] overflow-y-auto">
-          <h2 className="text-xs font-semibold wb-text-muted uppercase mb-2">文档列表</h2>
-          {loadingList ? (
-            <p className="text-sm wb-text-muted">加载中…</p>
-          ) : summaries.length === 0 ? (
-            <p className="text-sm wb-text-muted">暂无文档，请先上传。</p>
-          ) : (
-            <ul className="space-y-1">
-              {summaries.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(s.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors min-h-[44px] ${
-                      selectedId === s.id
-                        ? 'bg-[color:var(--wb-blue-soft)] font-medium'
-                        : 'hover:bg-[color:var(--wb-surface-2)]'
-                    }`}
-                    style={{ color: 'var(--wb-text)' }}
-                  >
-                    <span className="line-clamp-2">{s.filename}</span>
-                    <span className="block text-[10px] wb-text-muted mt-0.5">
-                      {s.status} · 待审 {s.pending_count ?? '—'}
+        <h3 style={{ marginBottom: 7 }}>LLM 预标注关系 · 待审核</h3>
+        {!selectedId ? (
+          <p className="muted">请选择左侧文档。</p>
+        ) : loadingDetail ? (
+          <p className="muted">加载详情…</p>
+        ) : !detail ? (
+          <p className="muted">无法加载该文档。</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              <button type="button" className="btn btn-sm" disabled={pendingRels.length === 0 || busy} onClick={selectAllPending}>
+                全选待审
+              </button>
+              <button type="button" className="btn btn-sm" disabled={selectedRelIds.size === 0 || busy} onClick={clearSelection}>
+                清除选择
+              </button>
+              <button type="button" className="btn btn-sm btn-ok" disabled={selectedRelIds.size === 0 || busy} onClick={() => batchAnnotate('approve')}>
+                批量批准（所选）
+              </button>
+              <button type="button" className="btn btn-sm btn-no" disabled={selectedRelIds.size === 0 || busy} onClick={() => batchAnnotate('reject')}>
+                批量拒绝（所选）
+              </button>
+            </div>
+            <div id="doc-rels">
+              {(detail.extracted_relations || []).map((rel) => {
+                const pending = isRelationPending(rel)
+                const checked = selectedRelIds.has(rel.id)
+                const c = Number(rel.effective_confidence ?? rel.confidence ?? 0)
+                const oneApprove = async () => {
+                  setBusy(true)
+                  try {
+                    await annotateDocumentRelation(selectedId, rel.id, { action: 'approve', annotated_by: engineerId })
+                    await loadDetail(selectedId)
+                    await loadList()
+                  } catch (e) {
+                    setMsg({ type: 'err', text: e.message || '操作失败' })
+                  } finally {
+                    setBusy(false)
+                  }
+                }
+                const oneReject = async () => {
+                  setBusy(true)
+                  try {
+                    await annotateDocumentRelation(selectedId, rel.id, { action: 'reject', annotated_by: engineerId })
+                    await loadDetail(selectedId)
+                    await loadList()
+                  } catch (e) {
+                    setMsg({ type: 'err', text: e.message || '操作失败' })
+                  } finally {
+                    setBusy(false)
+                  }
+                }
+                return (
+                  <div key={rel.id} className={`rel-pending ${relStatusClass(rel)}`}>
+                    {pending ? (
+                      <button type="button" aria-label={checked ? '取消选择' : '选择'} onClick={() => toggleRel(rel.id)} style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t1)' }}>
+                        {checked ? <CheckSquare style={{ width: 18, height: 18 }} /> : <Square style={{ width: 18, height: 18 }} />}
+                      </button>
+                    ) : (
+                      <span style={{ width: 22 }} />
+                    )}
+                    <span className="rnode" style={{ fontSize: 10 }}>
+                      {rel.source_node_name || rel.source_node_id}
                     </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="lg:col-span-2 wb-card p-4">
-          {!selectedId ? (
-            <p className="text-sm wb-text-muted">请选择左侧文档。</p>
-          ) : loadingDetail ? (
-            <p className="text-sm wb-text-muted">加载详情…</p>
-          ) : !detail ? (
-            <p className="text-sm wb-text-muted">无法加载该文档。</p>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold" style={{ color: 'var(--wb-text)' }}>
-                    {detail.filename}
-                  </h2>
-                  <p className="text-xs wb-text-muted mt-1">
-                    状态 {detail.status} · 模板 {detail.template_type}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy || detail.status === 'committed'}
-                  onClick={handleCommit}
-                  className="wb-btn-primary min-h-[44px] disabled:opacity-40"
-                >
-                  提交到图谱
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={selectAllPending}
-                  disabled={pendingRels.length === 0 || busy}
-                  className="wb-btn-ghost text-sm min-h-[44px]"
-                >
-                  全选待审
-                </button>
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  disabled={selectedRelIds.size === 0 || busy}
-                  className="wb-btn-ghost text-sm min-h-[44px]"
-                >
-                  清除选择
-                </button>
-                <button
-                  type="button"
-                  onClick={() => batchAnnotate('approve')}
-                  disabled={selectedRelIds.size === 0 || busy}
-                  className="wb-btn-success text-sm min-h-[44px] disabled:opacity-40"
-                >
-                  批量批准
-                </button>
-                <button
-                  type="button"
-                  onClick={() => batchAnnotate('reject')}
-                  disabled={selectedRelIds.size === 0 || busy}
-                  className="wb-btn-danger text-sm min-h-[44px] disabled:opacity-40"
-                >
-                  批量拒绝
-                </button>
-              </div>
-
-              <ul className="space-y-2">
-                {(detail.extracted_relations || []).map((rel) => {
-                  const pending = isRelationPending(rel)
-                  const checked = selectedRelIds.has(rel.id)
-                  return (
-                    <li
-                      key={rel.id}
-                      className="wb-card-muted p-3 rounded-lg flex gap-3 items-start"
-                    >
-                      {pending ? (
-                        <button
-                          type="button"
-                          aria-label={checked ? '取消选择' : '选择'}
-                          onClick={() => toggleRel(rel.id)}
-                          className="mt-0.5 p-1 text-[color:var(--wb-text)]"
-                        >
-                          {checked ? (
-                            <CheckSquare className="w-5 h-5" />
-                          ) : (
-                            <Square className="w-5 h-5" />
-                          )}
+                    <span style={{ fontSize: 10, color: 'var(--t2)' }}>→ {rel.relation_type} →</span>
+                    <span className="rnode" style={{ fontSize: 10 }}>
+                      {rel.target_node_name || rel.target_node_id}
+                    </span>
+                    <span className="badge b-gray" style={{ fontSize: 9 }}>
+                      {rel.evidence?.slice(0, 12) || '通用'}
+                    </span>
+                    <div className="cbar" style={{ flex: 1, maxWidth: 60 }}>
+                      <div className={`cfill ${c >= 0.8 ? 'cf-high' : 'cf-mid'}`} style={{ width: `${Math.min(100, c * 100)}%` }} />
+                    </div>
+                    <span style={{ fontSize: 10, minWidth: 28 }}>{c.toFixed(2)}</span>
+                    {pending ? (
+                      <>
+                        <button type="button" className="btn btn-ok btn-sm" disabled={busy} onClick={oneApprove}>
+                          ✓
                         </button>
-                      ) : (
-                        <span className="w-7 flex-shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0 text-sm">
-                        <p className="font-medium wb-text-secondary">
-                          {rel.relation_type}{' '}
-                          <span className="text-xs wb-text-muted">
-                            · {rel.annotation_status} · conf {rel.effective_confidence ?? rel.confidence}
-                          </span>
-                        </p>
-                        <p className="text-xs wb-text-muted mt-1 break-words">
-                          {rel.source_node_name} → {rel.target_node_name}
-                        </p>
-                        {rel.evidence ? (
-                          <p className="text-xs mt-2 wb-text-secondary line-clamp-3">{rel.evidence}</p>
-                        ) : null}
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-
-              {detail.extracted_relations?.length === 0 && (
-                <p className="text-sm wb-text-muted">暂无抽取候选关系。</p>
-              )}
-            </>
-          )}
-        </div>
+                        <button type="button" className="btn btn-no btn-sm" disabled={busy} onClick={oneReject}>
+                          ✗
+                        </button>
+                        <button type="button" className="btn btn-sm" style={{ fontSize: 10 }} disabled={busy} onClick={() => window.alert('修改功能开发中')}>
+                          ✎
+                        </button>
+                      </>
+                    ) : rel.annotation_status?.toLowerCase() === 'approved' ? (
+                      <span className="badge b-green">已通过</span>
+                    ) : (
+                      <span className="badge b-red">已拒绝</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {detail.extracted_relations?.length === 0 && <p className="muted">暂无抽取候选关系。</p>}
+          </>
+        )}
       </div>
 
       {msg && (
         <p
-          className={`mt-4 text-sm rounded-lg px-3 py-2 ${
-            msg.type === 'ok'
-              ? 'bg-[color:var(--wb-green-soft)]'
-              : 'bg-[color:var(--wb-red-soft)] text-[color:var(--wb-red)]'
-          }`}
-          style={msg.type === 'ok' ? { color: 'var(--wb-green)' } : undefined}
+          className="mt8"
+          style={{
+            fontSize: 12,
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: msg.type === 'ok' ? 'var(--green-l)' : 'var(--red-l)',
+            color: msg.type === 'ok' ? 'var(--green)' : 'var(--red)',
+          }}
         >
           {msg.text}
         </p>

@@ -1,16 +1,10 @@
 /**
  * 告警根因分析（场景 S-01）— 使用全局 .relos-page / .card / .btn / .muted
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import AlarmRootCauseCard from '../components/AlarmRootCauseCard'
-import { analyzeAlarmStream, postTelemetryEvent, streamAnswer } from '../api/client'
-
-const QUICK_ALARMS = [
-  { code: 'VIB-001', device: 'device-M1', name: '1号机（注塑机）', desc: '振动超限' },
-  { code: 'TEMP-002', device: 'device-M2', name: '2号机（焊接机）', desc: '温度异常' },
-  { code: 'WELD-003', device: 'device-M3', name: '3号机（M3）', desc: '焊接过热告警' },
-]
+import { analyzeAlarmStream, postTelemetryEvent, streamAnswer, getQuickAlarmsConfig } from '../api/client'
 
 export default function AlarmAnalysis() {
   const [form, setForm] = useState({
@@ -30,6 +24,21 @@ export default function AlarmAnalysis() {
     traceId: '',
   })
   const [answering, setAnswering] = useState(false)
+  const [quickAlarms, setQuickAlarms] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    getQuickAlarmsConfig()
+      .then((items) => {
+        if (!cancelled && Array.isArray(items)) setQuickAlarms(items)
+      })
+      .catch(() => {
+        if (!cancelled) setQuickAlarms([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleQuick = (q) => {
     setForm({
@@ -145,7 +154,12 @@ export default function AlarmAnalysis() {
           与「专家知识 · 选择访谈场景」相同的卡片选中态
         </div>
         <div className="g2" style={{ marginTop: 8 }}>
-          {QUICK_ALARMS.map((q) => (
+          {quickAlarms.length === 0 ? (
+            <p className="muted" style={{ fontSize: 12 }}>
+              未加载到快速选择项。请确认后端可用，且包内存在 relos/demo_data/quick_alarms.json。
+            </p>
+          ) : null}
+          {quickAlarms.map((q) => (
             <div
               key={q.code}
               className="card"

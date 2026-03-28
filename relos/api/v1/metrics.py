@@ -13,14 +13,32 @@ Sprint 3 Week 11：可观测性 — /v1/metrics 端点。
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from relos.core.repository import RelationRepository
 
 router = APIRouter()
+
+
+class RelationTypeBucket(BaseModel):
+    relation_type: str
+    count: int
+    avg_confidence: float
+
+
+class ProvenanceBucket(BaseModel):
+    provenance: str
+    count: int
+
+
+class PhaseBucket(BaseModel):
+    phase: str
+    count: int
+    avg_confidence: float
 
 
 class GraphMetrics(BaseModel):
@@ -40,6 +58,11 @@ class GraphMetrics(BaseModel):
     active_ratio: float  # active_count / total_relations
     review_backlog: int  # 待审核积压量（= pending_review_count）
 
+    # 分布（Neo4j 聚合，供知识库状态等页）
+    relation_type_breakdown: list[RelationTypeBucket] = Field(default_factory=list)
+    provenance_breakdown: list[ProvenanceBucket] = Field(default_factory=list)
+    knowledge_phase_breakdown: list[PhaseBucket] = Field(default_factory=list)
+
     # 元信息
     collected_at: datetime
 
@@ -54,6 +77,11 @@ async def get_metrics(request: Request) -> GraphMetrics:
     """
     repo = RelationRepository(request.app.state.neo4j_driver)
     raw = await repo.get_graph_metrics()
+    rt_dist, prov_dist, phase_dist = await asyncio.gather(
+        repo.get_relation_type_distribution(8),
+        repo.get_provenance_distribution(),
+        repo.get_knowledge_phase_distribution(),
+    )
 
     total = raw["total_relations"]
     active = raw["active_count"]
@@ -69,5 +97,8 @@ async def get_metrics(request: Request) -> GraphMetrics:
         archived_count=raw["archived_count"],
         active_ratio=active_ratio,
         review_backlog=raw["pending_review_count"],
+        relation_type_breakdown=[RelationTypeBucket(**x) for x in rt_dist],
+        provenance_breakdown=[ProvenanceBucket(**x) for x in prov_dist],
+        knowledge_phase_breakdown=[PhaseBucket(**x) for x in phase_dist],
         collected_at=datetime.now(UTC),
     )

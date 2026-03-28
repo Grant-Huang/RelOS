@@ -1,0 +1,20 @@
+[
+  {
+    "code": "VIB-001",
+    "device": "device-M1",
+    "name": "1号机（注塑机）",
+    "desc": "振动超限"
+  },
+  {
+    "code": "TEMP-002",
+    "device": "device-M2",
+    "name": "2号机（焊接机）",
+    "desc": "温度异常"
+  },
+  {
+    "code": "WELD-003",
+    "device": "device-M3",
+    "name": "3号机（M3）",
+    "desc": "焊接过热告警"
+  }
+]

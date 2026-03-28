@@ -9,7 +9,7 @@ export default function ThemeToggle({ className = '' }) {
     <button
       type="button"
       onClick={toggleTheme}
-      className={`wb-btn-icon ${className}`}
+      className={`relos-btn-icon ${className}`}
       title={isDark ? '切换浅色' : '切换深色'}
       aria-label={isDark ? '切换浅色主题' : '切换深色主题'}
     >
