@@ -118,6 +118,10 @@ class DocumentRecord(BaseModel):
     status: DocumentStatus = DocumentStatus.UPLOADED
     error_message: Optional[str] = None
     extracted_relations: list[ExtractedRelationDraft] = []
+    # ── 阶段1/3：上传后的“流式澄清”───────────────────────────────
+    # 注意：MVP 先以 dict 形式承载问题结构，后续可升级为强类型模型。
+    clarify_questions: list[dict] = []
+    clarify_answers: dict[str, str] = {}
     committed_count: int = 0
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None

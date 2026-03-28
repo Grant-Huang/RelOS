@@ -1,7 +1,7 @@
 # RelOS 部署文档
 
-> 适用版本：Sprint 4（v0.4.x）
-> 更新日期：2026-03-23
+> 适用版本：Sprint 4+（含 Web 工作台说明）
+> 更新日期：2026-03-28
 
 ---
 
@@ -55,10 +55,16 @@ python scripts/simulate_alarm.py
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| RelOS API | `8000` | REST API 主入口 |
-| Neo4j Browser | `7474` | 图数据库 Web UI（浏览器打开） |
-| Neo4j Bolt | `7687` | Python Driver 连接协议 |
+| RelOS API | `8000` | REST API 主入口；**业务联调与 Swagger 默认入口** |
+| Web 工作台（可选） | `3000`（默认） | 仓库 `frontend/` 通过 `npm run dev` 启动，**非** Docker Compose 内置服务 |
+| Neo4j Browser | `7474` | 图数据库 **Neo4j 自带** Web UI；用于 Cypher 与图数据排查，**易与「产品首页」混淆**，见下文说明 |
+| Neo4j Bolt | `7687` | Bolt 协议（驱动 / Browser 连接） |
 | Redis | `6379` | 缓存 / 限流队列 |
+
+**勿混淆**：
+
+- 向最终用户或车间推广时，**首页**应为 **API 对接的应用** 或 **自托管的 `frontend` 构建产物**，而不是 `7474`。
+- `7474` 登录框中的用户名/密码是 **Neo4j 数据库账号**（Compose 默认常为 `neo4j` / `relos_dev`，以 `NEO4J_AUTH` 为准），与 RelOS 业务用户体系无关。
 
 ### 常用开发命令
 
@@ -524,7 +530,19 @@ docker compose restart neo4j
 docker compose restart api
 ```
 
-### 8.4 Redis 限流误触发
+### 8.4 用户反馈「首页是 Neo4j 登录」
+
+**现象**：浏览器打开某地址后出现 **Connect to instance**、要求输入 Neo4j 密码。
+
+**原因**：访问的是 **`http://<host>:7474`（Neo4j Browser）**，属于数据库管理界面，并非 RelOS 业务 UI。
+
+**处理**：
+
+1. 向用户说明正确入口：**API** `http://<host>:8000/docs` 或 **Web 工作台**（`frontend` 构建/`npm run dev` 的站点，常见开发端口 `3000`）。
+2. 若仅需验证部署：`curl http://<host>:8000/v1/health`。
+3. 若确实要登录 Neo4j Browser：使用 `NEO4J_AUTH` 配置的用户名与密码（默认参考 `docker-compose.yml` 中 `neo4j/${NEO4J_PASSWORD:-relos_dev}`）。
+
+### 8.5 Redis 限流误触发
 
 ```bash
 # 症状：所有请求返回 429 Too Many Requests
@@ -538,7 +556,7 @@ docker compose exec redis redis-cli del "relos:rate:factory-001:$(date +%s | cut
 RATE_LIMIT_REQUESTS=500
 ```
 
-### 8.5 Excel 导入失败
+### 8.6 Excel 导入失败
 
 ```bash
 # 症状：POST /v1/expert-init/upload-excel 返回 422

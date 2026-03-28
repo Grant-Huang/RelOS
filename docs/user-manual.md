@@ -1,8 +1,8 @@
 # RelOS 系统使用操作手册
 
-> **版本**：v0.4.0（Sprint 4）
-> **适用角色**：维修工程师、设备管理员、IT 集成人员
-> **更新日期**：2026-03-23
+> **版本**：v0.5.0（Sprint 4+）
+> **适用角色**：维修工程师、设备管理员、专家/知识管理员、IT 集成人员
+> **更新日期**：2026-03-28（补充 Web 知识工作台、部署入口说明）
 
 ---
 
@@ -14,6 +14,8 @@
 - **第二部分：使用场景** — 在实际工作中怎么用，步骤是什么
 
 **系统核心价值**：RelOS 将老工程师的维修经验和历史故障数据转化为结构化知识，帮助任何维修人员快速找到设备故障根因，减少停机时间。
+
+**相关文档**：[快速上手指南](quickstart.md)（安装与首次启动）、[部署说明](deployment.md)（端口与安全）、[用户体验与信息架构](ux-flow.md)（含工作台路由表）、[设计计划](design-plan.md)（界面与组件规划）。
 
 ---
 
@@ -33,9 +35,25 @@ RelOS 查询历史关系知识库
 工程师确认 → 知识库自动优化（数据飞轮）
 ```
 
+### 1.1 应该打开哪个网址？（避免与 Neo4j 混淆）
+
+部署后常见疑问：**浏览器里出现「Connect to instance」、要求输入 Neo4j 密码**——那是 **Neo4j Browser**（图数据库自带的管理界面），**不是** RelOS 的业务首页。
+
+| 地址 | 是什么 | 谁在用 |
+|------|--------|--------|
+| `http://localhost:8000/docs` | RelOS **API 文档（Swagger）** | 开发/集成、联调接口 |
+| `http://localhost:8000/v1/health` | API **健康检查** | 运维确认后端已启动 |
+| `http://localhost:3000`（默认） | **Web 知识工作台**（需本地启动前端，见 [quickstart](quickstart.md)） | 操作员、专家/管理员日常操作 |
+| `http://localhost:7474` | **Neo4j Browser**（查库、跑 Cypher） | 开发/DBA；可选使用 |
+
+- **Neo4j** 是后台存储「关系图谱」的数据库；用户名一般为 `neo4j`，本地 Docker 默认密码见 `docker-compose.yml`（未改 `.env` 时常为 `relos_dev`）。
+- **日常业务**：优先打开 **API** 或 **前端工作台**；仅在需要看图谱结构、执行图查询时再打开 7474。
+
+---
+
 ## 2. 核心概念
 
-理解这 3 个概念，就能理解系统的工作原理：
+理解下面这些概念，就能理解系统的工作原理：
 
 ### 2.1 关系（Relation）
 
@@ -50,6 +68,17 @@ RelOS 查询历史关系知识库
 - **来源**：工程师经验 / 传感器 / MES 系统 / AI 分析
 - **状态**：活跃 / 待审核 / 冲突 / 已归档
 - **半衰期**：多少天后置信度降低一半（经验知识 365 天，物理关系 10 年）
+- **知识阶段（`knowledge_phase`）**：这条知识来自哪个建设阶段（初始化 / 专家访谈 / 文档预训练 / 运行强化）
+- **阶段权重（`phase_weight`，0.0～1.0）**：不同阶段对最终可信度的调节系数；未填写时由系统按阶段给默认值
+
+**四阶段与默认阶段权重（与数据模型、API 文档一致）**：
+
+| knowledge_phase | 含义 | 默认 phase_weight |
+|-----------------|------|-------------------|
+| `bootstrap` | 公共知识初始化（公开资料、行业模板等） | 0.35 |
+| `interview` | 专家访谈、单条/批量专家录入 | 0.90 |
+| `pretrain` | 企业文档导入、AI 抽取后提交图谱（见 `/v1/documents/*`） | 0.70 |
+| `runtime` | 运行期反馈、在线强化（如 `POST /v1/relations/{id}/feedback`） | 1.00 |
 
 ### 2.2 数据飞轮
 
@@ -68,6 +97,37 @@ RelOS 查询历史关系知识库
 - **关闭时（生产就绪）**：系统可以真实触发操作
 
 > 建议先用 Shadow Mode 运行 2-4 周，验证推荐准确率 > 70% 后再关闭。
+
+### 2.4 Web 知识工作台（用户前端 + 专家/管理员）
+
+仓库内 **MVP 前端** 位于 `frontend/`，信息架构与单页原型 [`relos_workbench_v2.html`](relos_workbench_v2.html) 对齐，支持 **浅色 / 深色**主题（顶栏切换，本地持久化）。默认落地页为 **运行时仪表盘**（操作员视角）。
+
+**侧栏分组与主要路径**：
+
+| 分组 | 用途 | 典型路径 |
+|------|------|----------|
+| **用户前端 · 运行时** | 今日有事、自动行为透明、人机协同标注 | `/runtime/dashboard`、`/runtime/automation`、`/runtime/prompt` |
+| **专家/管理员 · 知识训练** | 三层知识来源分轨，权威性可见 | `/knowledge/public`、`/knowledge/expert`、`/knowledge/documents` |
+| **系统监控** | 图谱与文档摄取摘要 | `/system/kb-status` |
+| **分析与演示** | 告警流式分析等原有演示页 | `/alarm` 等 |
+
+**三层知识与置信度上限（界面「权威性条」与文档一致）**：
+
+| 层 | 路径 | 工作流要点 | 置信度上限（产品约定） |
+|----|------|------------|------------------------|
+| 层 1 公开知识 | `/knowledge/public` | 粘贴 → AI 预标注（可占位）→ 人工审核后入图 | LLM 预标注 **0.85**，`knowledge_phase=bootstrap` |
+| 层 2 专家知识 | `/knowledge/expert` | 访谈微卡片 + 结构化向导，隐性经验显式化 | 专家确认后可达 **1.0**，`knowledge_phase=interview` |
+| 层 3 企业文档 | `/knowledge/documents` | 上传 → 候选关系 → **批量**批准/拒绝 → 提交图谱 | LLM 预标注 **0.85**，`knowledge_phase=pretrain` |
+
+**提示标注工作区**（`/runtime/prompt`）：面向置信度 **0.50–0.79** 的待审关系，操作走 `POST /v1/relations/{id}/feedback`（`engineer_id`、`confirmed`），与关系核心（Relation Core）联动；「不确定」等行为以实现为准（可仅前端移出队列而不调用接口）。
+
+**本地启动前端**（需已安装 Node.js）：
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+浏览器访问终端提示的本地地址（一般为 `http://localhost:3000`）。详细步骤见 [quickstart.md](quickstart.md)。
 
 ---
 
@@ -101,6 +161,42 @@ RelOS 查询历史关系知识库
 | `requires_human_review` | 是否需要人工审核 | `false` |
 | `shadow_mode` | 影子模式状态 | `true` |
 
+**管理层/高层自解释字段（新增）**：
+
+除了给一线工程师的 `reasoning` 之外，系统还会返回一组“可追溯解释”字段，适合老中层/高层快速判断与追责审计：
+
+| 字段 | 说明 | 适用人群 |
+|------|------|----------|
+| `explanation_summary` | 一屏摘要：结论 + 置信度 + 主要证据阶段贡献 | 高层 |
+| `evidence_relations` | 证据关系最小集合（可追溯到具体关系 ID 与来源） | 中层/审计 |
+| `phase_contributions` | 按 `knowledge_phase` 汇总的阶段贡献（解释阶段权重影响） | 中层 |
+| `confidence_trace_id` | 解释追踪 ID（用于日志/埋点/回放） | IT/审计 |
+
+示例（节选）：
+
+```json
+{
+  "explanation_summary": "推荐：component-bearing-M1 异常；置信度 0.85；主要证据阶段：interview（约 65%）",
+  "evidence_relations": [
+    {
+      "id": "rel-001",
+      "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
+      "confidence": 0.70,
+      "provenance": "manual_engineer",
+      "knowledge_phase": "interview",
+      "phase_weight": 0.90,
+      "status": "active",
+      "provenance_detail": "张工 20 年经验总结"
+    }
+  ],
+  "phase_contributions": [
+    {"knowledge_phase": "interview", "score": 0.63, "share": 0.65},
+    {"knowledge_phase": "runtime", "score": 0.34, "share": 0.35}
+  ],
+  "confidence_trace_id": "conf-trace-..."
+}
+```
+
 **三种推理路径**：
 
 ```
@@ -132,6 +228,8 @@ RelOS 查询历史关系知识库
   "target_node_type": "Component",
   "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
   "confidence": 0.85,
+  "knowledge_phase": "interview",
+  "phase_weight": 0.90,
   "provenance_detail": "20年经验，高温下振动告警85%是轴承问题",
   "engineer_id": "zhang-engineer"
 }
@@ -151,12 +249,12 @@ RelOS 查询历史关系知识库
 
 **Excel 模板格式**：
 
-| 源节点ID | 源节点类型 | 目标节点ID | 目标节点类型 | 关系类型 | 置信度 |
-|---------|----------|----------|------------|---------|-------|
-| alarm-VIB-001 | Alarm | component-bearing-M1 | Component | ALARM__INDICATES__COMPONENT_FAILURE | 0.85 |
-| device-M1 | Device | alarm-VIB-001 | Alarm | DEVICE__TRIGGERS__ALARM | 0.90 |
+| 源节点ID | 源节点类型 | 目标节点ID | 目标节点类型 | 关系类型 | 置信度 | 知识阶段（可选）| 阶段权重（可选）|
+|---------|----------|----------|------------|---------|-------|----------------|----------------|
+| alarm-VIB-001 | Alarm | component-bearing-M1 | Component | ALARM__INDICATES__COMPONENT_FAILURE | 0.85 | interview | 0.90 |
+| device-M1 | Device | alarm-VIB-001 | Alarm | DEVICE__TRIGGERS__ALARM | 0.90 | interview | 0.90 |
 
-> 💡 **小提示**：列名支持中英文，顺序不限。
+> 💡 **小提示**：列名支持中英文，顺序不限。`knowledge_phase` / `phase_weight` 可省略，省略时服务端按阶段给默认权重（专家录入一般为 `interview` / `0.90`）。
 
 **专家知识录入的特殊规则**：
 - 置信度按原值保存（不压缩）
@@ -190,6 +288,8 @@ POST /v1/relations/{relation_id}/feedback
 
 - `confirmed: true` → 置信度 +0.15，状态变为"活跃"
 - `confirmed: false` → 置信度 -0.30，若低于 0.2 则归档
+
+该接口属于**运行期强化（阶段 4）**：服务端会将本次反馈关联为 `knowledge_phase = "runtime"`，并可将关系按策略标记为运行期权重（默认 `phase_weight = 1.00`）。请求体仍只需 `engineer_id` 与 `confirmed`，无需手写阶段字段。
 
 #### 查询设备子图
 
@@ -308,7 +408,7 @@ curl -X POST http://localhost:8000/v1/decisions/analyze-alarm \
 **步骤 4**：确认结果后提交反馈
 
 ```bash
-# 如果确认是轴承问题
+# 如果确认是轴承问题（运行期强化：服务端记为 knowledge_phase=runtime，phase_weight 按策略可为 1.00）
 curl -X POST http://localhost:8000/v1/relations/rel-001/feedback \
   -H "Content-Type: application/json" \
   -d '{"engineer_id": "zhang-engineer", "confirmed": true}'
@@ -341,6 +441,8 @@ curl -X POST http://localhost:8000/v1/expert-init \
     "target_node_type": "Component",
     "relation_type": "ALARM__INDICATES__COMPONENT_FAILURE",
     "confidence": 0.90,
+    "knowledge_phase": "interview",
+    "phase_weight": 0.90,
     "provenance_detail": "张工：温度告警90%是冷却系统问题，检查冷却液水位和泵",
     "engineer_id": "zhang-engineer"
   }'
@@ -404,6 +506,8 @@ curl http://localhost:8000/v1/relations/subgraph \
 | 关系类型 | relation_type | ✅ | 见下方关系类型表 |
 | 置信度 | confidence | ❌ | 0.0~1.0，默认 0.75 |
 | 来源详情 | provenance_detail | ❌ | 工单号、日期等 |
+| 知识阶段 | knowledge_phase | ❌ | `interview` / `pretrain` 等，省略时由系统推断 |
+| 阶段权重 | phase_weight | ❌ | 0.0~1.0，省略时按 `knowledge_phase` 默认回填 |
 
 **支持的关系类型**：
 
@@ -454,6 +558,10 @@ curl http://localhost:8000/v1/metrics
 ### 操作步骤
 
 **步骤 1**：查看待审核队列
+
+**方式 A（推荐，已部署前端时）**：浏览器打开工作台 **「提示标注工作区」**（`/runtime/prompt`）。界面默认聚焦置信度 **0.50–0.79** 区间，与「提示标注」产品定义一致；全量待审列表仍以 API 为准。
+
+**方式 B（API）**：
 
 ```bash
 curl http://localhost:8000/v1/relations/pending-review?limit=20
@@ -574,6 +682,7 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 |------|---|
 | 基础 URL | `http://localhost:8000/v1` |
 | 接口文档 | `http://localhost:8000/docs` |
+| Web 工作台（本地） | `frontend/` 执行 `npm run dev`，默认 `http://localhost:3000` |
 | 数据格式 | JSON |
 | 编码 | UTF-8 |
 
@@ -588,6 +697,8 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 | `/relations/{id}/feedback` | POST | 提交工程师反馈 |
 | `/relations/subgraph` | POST | 查询设备子图 |
 | `/relations/pending-review` | GET | 待审核队列 |
+| `/telemetry/events` | GET | 埋点/事件列表（自动标注监控等） |
+| `/documents/*` | 多种 | 企业文档上传、澄清、单条标注、提交图谱 |
 | `/decisions/analyze-alarm` | POST | 告警根因分析 |
 | `/decisions/execute-action` | POST | 执行操作任务 |
 | `/decisions/action/{id}` | GET | 查询操作状态 |
@@ -614,6 +725,14 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 | MES/ERP 导入 | `mes_structured` | 结构化，alpha=0.4 |
 | AI 分析抽取 | `llm_extracted` | 置信度上限 0.85，强制待审核 |
 | 系统推断 | `inference` | 自动生成，alpha=0.3 |
+
+## 知识阶段与阶段权重（knowledge_phase / phase_weight）
+
+与 `docs/data-model.md`、`docs/api.md` 一致：每条关系可携带**知识阶段**与**阶段权重**，用于解释“这条知识从哪一阶段进入图谱、对最终置信度如何加权”。调用 API 时：
+
+- **专家单条/批量/Excel 录入**：建议显式写 `knowledge_phase: "interview"` 与 `phase_weight: 0.90`（也可省略，由服务端默认）。
+- **文档摄取提交到图谱**（`POST /v1/documents/{doc_id}/commit`）：服务端通常写入 `knowledge_phase: "pretrain"`、`phase_weight: 0.70`。
+- **工程师反馈**（`POST /v1/relations/{id}/feedback`）：无需在 JSON 里写阶段字段；系统按**运行期强化**处理，对应 `runtime` / 默认 `1.00`。
 
 ## 置信度参考
 

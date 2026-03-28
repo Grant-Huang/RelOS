@@ -5,7 +5,7 @@
 import { useState, useRef } from 'react'
 import { UserCog, ChevronRight, ChevronLeft, Plus, Trash2, CheckCircle, Upload } from 'lucide-react'
 import ConfidenceBar from '../components/ConfidenceBar'
-import { expertInitRelation, uploadDocument } from '../api/client'
+import { expertInitRelation, uploadDocument, getDocument, clarifyDocument, postTelemetryEvent } from '../api/client'
 
 const RELATION_TEMPLATES = [
   { value: 'ALARM__INDICATES__COMPONENT_FAILURE', label: '告警 → 根因部件' },
@@ -48,7 +48,7 @@ function StepIndicator({ current }) {
   )
 }
 
-export default function ExpertInit() {
+export default function ExpertInit({ embedded = false }) {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
@@ -70,6 +70,10 @@ export default function ExpertInit() {
   const [uploadResult, setUploadResult] = useState(null)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef()
+  const [docDetail, setDocDetail] = useState(null)
+  const [docLoading, setDocLoading] = useState(false)
+  const [clarifyAns, setClarifyAns] = useState({})
+  const [clarifySubmitting, setClarifySubmitting] = useState(false)
 
   // 步骤 4：汇总
   const [submitted, setSubmitted] = useState(0)
@@ -92,6 +96,8 @@ export default function ExpertInit() {
   const handleUpload = async (file) => {
     if (!file) return
     setUploading(true)
+    setDocDetail(null)
+    setClarifyAns({})
     try {
       const result = await uploadDocument(file)
       setUploadResult(result)
@@ -99,6 +105,38 @@ export default function ExpertInit() {
       setUploadResult({ error: '上传失败，请确认后端服务已启动' })
     } finally {
       setUploading(false)
+    }
+  }
+
+  const loadDoc = async () => {
+    if (!uploadResult?.id) return
+    setDocLoading(true)
+    try {
+      const d = await getDocument(uploadResult.id)
+      setDocDetail(d)
+      const existing = d?.clarify_answers || {}
+      setClarifyAns(existing)
+    } catch {
+      setDocDetail({ error: '获取文档状态失败，请稍后重试' })
+    } finally {
+      setDocLoading(false)
+    }
+  }
+
+  const submitClarify = async () => {
+    if (!uploadResult?.id) return
+    setClarifySubmitting(true)
+    try {
+      const d = await clarifyDocument(uploadResult.id, { answers: clarifyAns, answered_by: 'engineer' })
+      setDocDetail(d)
+      postTelemetryEvent({
+        event_name: 'document_clarify_submitted',
+        props: { doc_id: uploadResult.id, answers: clarifyAns },
+      }).catch(() => {})
+    } catch (e) {
+      setDocDetail({ error: e.message || '提交澄清失败' })
+    } finally {
+      setClarifySubmitting(false)
     }
   }
 
@@ -129,15 +167,16 @@ export default function ExpertInit() {
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      {/* 页头 */}
-      <div className="flex items-center gap-3 mb-8">
-        <UserCog className="w-6 h-6 text-purple-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">专家初始化向导</h1>
-          <p className="text-gray-500 text-sm">将现场经验沉淀为知识图谱</p>
+    <div className={embedded ? 'p-0 max-w-2xl mx-auto' : 'p-8 max-w-2xl mx-auto'}>
+      {!embedded && (
+        <div className="flex items-center gap-3 mb-8">
+          <UserCog className="w-6 h-6 text-purple-400" />
+          <div>
+            <h1 className="text-2xl font-bold text-white">专家初始化向导</h1>
+            <p className="text-gray-500 text-sm">将现场经验沉淀为知识图谱</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <StepIndicator current={step} />
 
@@ -364,6 +403,81 @@ export default function ExpertInit() {
             )}
             {uploadResult?.error && (
               <p className="mt-3 text-sm text-red-400">{uploadResult.error}</p>
+            )}
+
+            {/* 上传后澄清（阶段1/3）：MVP 先做静态问题 + 记录答案 */}
+            {uploadResult && !uploadResult.error && (
+              <div className="mt-4 bg-surface rounded-xl border border-gray-700 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">上传后澄清（可选）</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      先回答 2-3 个问题，系统后续可据此提升抽取质量（MVP：当前仅记录答案）
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadDoc}
+                    disabled={docLoading}
+                    className="px-3 py-2 rounded-lg border border-gray-700 bg-bg text-gray-200 hover:border-gray-500 disabled:opacity-40 text-sm"
+                  >
+                    {docLoading ? '加载中…' : '加载问题'}
+                  </button>
+                </div>
+
+                {docDetail?.error && (
+                  <p className="text-sm text-red-400 mt-3">{docDetail.error}</p>
+                )}
+
+                {docDetail && !docDetail.error && (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs text-gray-600">
+                      doc：<span className="font-mono">{uploadResult.id}</span> · status：{docDetail.status}
+                    </p>
+
+                    {(docDetail.clarify_questions || []).map((q) => (
+                      <div key={q.question_id} className="rounded-lg border border-gray-700 bg-bg p-3">
+                        <p className="text-sm text-white">{q.prompt}</p>
+                        {q.type === 'single_choice' ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {(q.options || []).map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => setClarifyAns((a) => ({ ...a, [q.question_id]: opt.id }))}
+                                className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
+                                  clarifyAns?.[q.question_id] === opt.id
+                                    ? 'border-blue-600 bg-blue-900/30 text-white'
+                                    : 'border-gray-700 bg-bg text-gray-200 hover:border-gray-500'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <input
+                            value={clarifyAns?.[q.question_id] || ''}
+                            onChange={(e) => setClarifyAns((a) => ({ ...a, [q.question_id]: e.target.value }))}
+                            placeholder="可选填写"
+                            className="mt-2 w-full bg-bg border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={submitClarify}
+                      disabled={clarifySubmitting}
+                      className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-semibold"
+                    >
+                      {clarifySubmitting ? '正在提交…' : '提交澄清答案'}
+                    </button>
+                    <p className="text-xs text-gray-600">
+                      说明：若文档尚未进入 <span className="font-mono">pending_review</span>，后端会返回 400（请稍后再试）。
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

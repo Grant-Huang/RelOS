@@ -41,6 +41,26 @@ class SourceType(StrEnum):
     EXPERT_DOCUMENT     = "expert_document"      # 专家文档（8D报告/案例库），LLM抽取+人工标注
 
 
+# ─────────────────────────────────────────────
+# 枚举：知识阶段
+# ─────────────────────────────────────────────
+
+class KnowledgePhase(StrEnum):
+    """
+    关系知识进入图谱的阶段（用于可解释性与治理）。
+
+    说明：
+    - 阶段是“治理/知识来源生命周期”的概念，不等同于 provenance。
+    - 阶段 2/3 可通过多轮强化持续产生新观测事件。
+    - 阶段 4（runtime）对应运行期在线反馈带来的校准。
+    """
+
+    BOOTSTRAP = "bootstrap"  # 初始化：公开知识/行业模板等
+    INTERVIEW = "interview"  # 调研：专家访谈/关系补录
+    PRETRAIN = "pretrain"    # 预训练：企业文档导入与 AI 标注
+    RUNTIME = "runtime"      # 运行：在线反馈强化
+
+
 class RelationStatus(StrEnum):
     """
     关系的生命周期状态。
@@ -97,6 +117,17 @@ class RelationObject(BaseModel):
         description="关系置信度，0.0–1.0"
     )
 
+    # ── 阶段化治理：knowledge_phase / phase_weight ──────────────
+    knowledge_phase: KnowledgePhase | None = Field(
+        default=None,
+        description="知识阶段（用于可解释性与治理）。"
+    )
+    phase_weight: float | None = Field(
+        default=None,
+        ge=0.0, le=1.0,
+        description="阶段权重（0.0–1.0）。"
+    )
+
     # ── 来源与溯源 ────────────────────────────
     provenance: SourceType = Field(description="关系来源类型")
     provenance_detail: str = Field(
@@ -141,12 +172,47 @@ class RelationObject(BaseModel):
         1. 置信度硬上限 0.85（防止系统过度信任 AI 抽取的非结构化知识）
         2. 强制 pending_review（LLM 关系不允许直接变为 active）
         """
+        # 先补齐阶段字段（只要调用方不显式传入，服务端自动回填）
+        if self.knowledge_phase is None:
+            self.knowledge_phase = KNOWLEDGE_PHASE_BY_PROVENANCE.get(
+                self.provenance, KnowledgePhase.BOOTSTRAP
+            )
+        if self.phase_weight is None:
+            self.phase_weight = PHASE_WEIGHT_BY_PHASE[self.knowledge_phase]
+
         if self.provenance == SourceType.LLM_EXTRACTED:
             if self.confidence > 0.85:
                 self.confidence = 0.85
-            if self.status == RelationStatus.ACTIVE:
+            # LLM 抽取关系默认必须进入 pending_review；
+            # 但当工程师已明确确认（运行期强化）后，允许升级为 active。
+            is_human_confirmed = (
+                (self.extracted_by or "").startswith("human:")
+                or self.knowledge_phase == KnowledgePhase.RUNTIME
+            )
+            if self.status == RelationStatus.ACTIVE and not is_human_confirmed:
                 self.status = RelationStatus.PENDING_REVIEW
         return self
+
+
+# 阶段权重默认值（与 docs/data-model.md、docs/api.md 保持一致）
+PHASE_WEIGHT_BY_PHASE: dict[KnowledgePhase, float] = {
+    KnowledgePhase.BOOTSTRAP: 0.35,
+    KnowledgePhase.INTERVIEW: 0.90,
+    KnowledgePhase.PRETRAIN: 0.70,
+    KnowledgePhase.RUNTIME: 1.00,
+}
+
+
+# provenance -> knowledge_phase 映射（用于服务端默认回填）
+KNOWLEDGE_PHASE_BY_PROVENANCE: dict[SourceType, KnowledgePhase] = {
+    SourceType.MANUAL_ENGINEER: KnowledgePhase.INTERVIEW,
+    SourceType.SENSOR_REALTIME: KnowledgePhase.RUNTIME,
+    SourceType.MES_STRUCTURED: KnowledgePhase.PRETRAIN,
+    SourceType.LLM_EXTRACTED: KnowledgePhase.PRETRAIN,
+    SourceType.INFERENCE: KnowledgePhase.RUNTIME,
+    SourceType.STRUCTURED_DOCUMENT: KnowledgePhase.PRETRAIN,
+    SourceType.EXPERT_DOCUMENT: KnowledgePhase.PRETRAIN,
+}
 
 
 # ─────────────────────────────────────────────

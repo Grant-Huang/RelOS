@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RelOS 知识工作台 v2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:13px}
+:root{
+  --bg:#fff;--bg2:#f5f5f3;--bg3:#eeede9;
+  --t1:#1a1a1a;--t2:#5f5e5a;--t3:#888780;
+  --b1:rgba(0,0,0,0.12);--b2:rgba(0,0,0,0.22);
+  --rm:8px;--rl:12px;
+  --blue:#185FA5;--blue-l:#E6F1FB;--blue-d:#0C447C;
+  --green:#3B6D11;--green-l:#EAF3DE;
+  --amber:#854F0B;--amber-l:#FAEEDA;
+  --red:#A32D2D;--red-l:#FCEBEB;
+  --purple:#3C3489;--purple-l:#EEEDFE;
+  --teal:#085041;--teal-l:#E1F5EE;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1e1e1c;--bg2:#2a2a28;--bg3:#242422;
+  --t1:#e8e6df;--t2:#a0a09a;--t3:#6a6a64;
+  --b1:rgba(255,255,255,0.10);--b2:rgba(255,255,255,0.18);
+}}
+/* ── Layout ── */
+.app{display:flex;min-height:100vh}
+.side{width:200px;background:var(--bg);border-right:.5px solid var(--b1);display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{padding:13px 14px 8px;border-bottom:.5px solid var(--b1)}
+.logo-n{font-size:14px;font-weight:600;color:var(--t1)}
+.logo-s{font-size:10px;color:var(--t3);margin-top:2px}
+.grp{padding:6px 14px 3px;font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.06em;margin-top:4px}
+.grp-badge{font-size:9px;padding:1px 5px;border-radius:2px;font-weight:500}
+.gb-u{background:var(--blue-l);color:var(--blue-d)}
+.gb-a{background:var(--amber-l);color:var(--amber)}
+.nb{width:100%;padding:7px 13px;background:none;border:none;border-left:2.5px solid transparent;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;color:var(--t2);display:flex;align-items:center;gap:7px}
+.nb.act{border-left-color:var(--blue);background:var(--bg2);color:var(--t1);font-weight:500}
+.nb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.main{flex:1;background:var(--bg3);overflow-y:auto}
+.notif{display:none;padding:7px 16px;font-size:12px;text-align:center;color:#fff;position:sticky;top:0;z-index:99}
+.view{padding:16px 20px;display:none}
+.view.on{display:block}
+/* ── Cards & Grids ── */
+.card{background:var(--bg);border:.5px solid var(--b1);border-radius:var(--rl);padding:12px 14px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mt12{margin-top:12px}
+/* ── Typography ── */
+h2{font-size:15px;font-weight:500;margin-bottom:12px;color:var(--t1);display:flex;align-items:center;gap:8px}
+h3{font-size:12px;font-weight:500;margin-bottom:7px;color:var(--t1)}
+.muted{color:var(--t2);font-size:12px;line-height:1.5}
+/* ── Badges ── */
+.badge{font-size:10px;padding:2px 7px;border-radius:3px;font-weight:500;white-space:nowrap}
+.b-blue{background:var(--blue-l);color:var(--blue-d)}.b-green{background:var(--green-l);color:var(--green)}
+.b-amber{background:var(--amber-l);color:var(--amber)}.b-red{background:var(--red-l);color:var(--red)}
+.b-purple{background:var(--purple-l);color:var(--purple)}.b-gray{background:var(--bg2);color:var(--t2)}
+.b-teal{background:var(--teal-l);color:var(--teal)}
+/* ── Buttons ── */
+.btn{background:var(--bg);border:.5px solid var(--b2);border-radius:var(--rm);padding:5px 12px;cursor:pointer;font-size:12px;color:var(--t1);font-family:inherit}
+.btn:hover{background:var(--bg2)}
+.btn-p{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-p:hover{background:var(--blue-d)}
+.btn-ok{background:var(--green);border-color:var(--green);color:#fff}
+.btn-no{background:var(--red);border-color:var(--red);color:#fff}
+.btn-sm{padding:2px 8px;font-size:11px}
+/* ── Confidence bar ── */
+.cbar{height:4px;border-radius:2px;background:var(--b1);overflow:hidden;flex:1}
+.cfill{height:100%;border-radius:2px}
+.cf-high{background:var(--green)}.cf-mid{background:var(--amber)}.cf-low{background:var(--red)}
+/* ── Relation node ── */
+.rnode{background:var(--bg);border:.5px solid var(--b2);border-radius:3px;padding:2px 7px;font-size:11px;font-weight:500;color:var(--t1)}
+.rrow{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--bg2);border-radius:var(--rm);margin-bottom:5px;font-size:12px}
+/* ── Tables ── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font-weight:500;padding:6px 8px;text-align:left;background:var(--bg2);border-bottom:.5px solid var(--b1);color:var(--t2)}
+.tbl td{padding:6px 8px;border-bottom:.5px solid var(--b1);vertical-align:middle}
+/* ── Status dots ── */
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.s-on{background:#639922}.s-mid{background:#EF9F27}.s-off{background:#B4B2A9}.s-err{background:#A32D2D}
+/* ── Upload zone ── */
+.upz{border:1.5px dashed var(--b2);border-radius:var(--rl);padding:24px;text-align:center;cursor:pointer;color:var(--t2);transition:border-color .15s}
+.upz:hover{border-color:var(--blue)}
+/* ── Event feed ── */
+.ev-item{border-left:3px solid transparent;padding:8px 10px 8px 12px;margin-bottom:5px;background:var(--bg);border-radius:0 var(--rm) var(--rm) 0;font-size:12px;cursor:pointer;transition:border-color .15s}
+.ev-auto{border-left-color:var(--green)}
+.ev-prompt{border-left-color:var(--amber);background:var(--amber-l)}
+.ev-new{border-left-color:var(--blue)}
+.ev-time{font-size:10px;color:var(--t3);margin-bottom:3px}
+.ev-rel{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:11px}
+/* ── Annotation card ── */
+.ann-card{background:var(--bg);border:.5px solid var(--b1);border-radius:var(--rl);padding:13px;margin-bottom:10px}
+.ann-src{font-size:11px;color:var(--t2);background:var(--bg2);border-radius:var(--rm);padding:8px 10px;margin-bottom:10px;line-height:1.6}
+.ann-src em{background:var(--blue-l);color:var(--blue-d);border-radius:2px;padding:0 3px;font-style:normal}
+.ann-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+/* ── Doc annotation ── */
+.doc-chunk{border:.5px solid var(--b1);border-radius:var(--rm);padding:10px;margin-bottom:8px;font-size:12px;line-height:1.7}
+.ent-span{border-radius:3px;padding:1px 4px;cursor:pointer;font-weight:500}
+.ent-machine{background:#E6F1FB;color:#0C447C}
+.ent-alarm{background:#FCEBEB;color:#A32D2D}
+.ent-issue{background:#FAEEDA;color:#854F0B}
+.ent-wo{background:#EAF3DE;color:#3B6D11}
+.rel-pending{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--amber-l);border-radius:var(--rm);margin-bottom:4px;font-size:11px;border:.5px solid rgba(133,79,11,.2)}
+.rel-ok{background:var(--green-l);border-color:rgba(59,109,17,.2)}
+.rel-rej{background:var(--red-l);border-color:rgba(163,45,45,.2);text-decoration:line-through;opacity:.6}
+/* ── Interview ── */
+.qcard{background:var(--bg2);border-radius:var(--rl);padding:12px;margin-bottom:10px}
+.q-num{font-size:10px;font-weight:600;color:var(--blue);margin-bottom:4px}
+.q-text{font-size:13px;color:var(--t1);margin-bottom:8px;line-height:1.5}
+textarea{width:100%;border:.5px solid var(--b2);border-radius:var(--rm);padding:8px;font-size:12px;font-family:inherit;color:var(--t1);background:var(--bg);resize:vertical;min-height:70px}
+select,input[type=range]{font-size:12px;padding:4px 8px;border:.5px solid var(--b2);border-radius:var(--rm);background:var(--bg);color:var(--t1);font-family:inherit}
+input[type=range]{padding:0;accent-color:var(--blue)}
+/* ── Stat cards ── */
+.stat{background:var(--bg2);border-radius:var(--rm);padding:10px 12px}
+.stat-v{font-size:22px;font-weight:500;margin-bottom:3px}
+.stat-l{font-size:11px;color:var(--t2)}
+/* ── Source layer pills ── */
+.layer-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:10px;font-size:11px;font-weight:500;margin-bottom:6px}
+.lp1{background:var(--blue-l);color:var(--blue-d)}
+.lp2{background:var(--purple-l);color:var(--purple)}
+.lp3{background:var(--teal-l);color:var(--teal)}
+/* ── Timeline ── */
+.tl-item{display:flex;gap:10px;margin-bottom:10px;font-size:12px}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0;margin-top:4px}
+.tl-line{width:1px;background:var(--b1);flex-shrink:0;margin:12px 0 0 3.5px}
+/* ── Divider ── */
+.div{height:.5px;background:var(--b1);margin:12px 0}
+/* chip for step indicators */
+.chip{display:inline-flex;align-items:center;background:var(--bg2);border:.5px solid var(--b1);border-radius:4px;padding:3px 9px;font-size:12px;cursor:pointer;margin:3px 3px 3px 0}
+.chip.on{background:var(--blue-l);border-color:var(--blue);color:var(--blue-d)}
+</style>
+</head>
+<body>
+<div class="app">
+<!-- ─ Sidebar ─ -->
+<div class="side">
+  <div class="logo">
+    <div class="logo-n">RelOS 知识工作台</div>
+    <div class="logo-s">v2.0 · 双前端设计审查</div>
+  </div>
+
+  <div class="grp">用户前端 <span class="grp-badge gb-u">运行时</span></div>
+  <button class="nb act" onclick="sw('rt-dash',this)"><span class="nb-dot s-on"></span>运行时仪表盘</button>
+  <button class="nb" onclick="sw('rt-auto',this)"><span class="nb-dot s-on"></span>自动标注监控</button>
+  <button class="nb" onclick="sw('rt-prompt',this)"><span class="nb-dot s-mid"></span>提示标注工作区</button>
+
+  <div class="grp">专家/管理员 <span class="grp-badge gb-a">知识训练</span></div>
+  <button class="nb" onclick="sw('kb-public',this)"><span class="nb-dot s-off"></span>公开知识标注</button>
+  <button class="nb" onclick="sw('kb-expert',this)"><span class="nb-dot s-off"></span>专家知识采集</button>
+  <button class="nb" onclick="sw('kb-doc',this)"><span class="nb-dot s-off"></span>企业文档标注</button>
+
+  <div class="grp">系统监控</div>
+  <button class="nb" onclick="sw('kb-status',this)"><span class="nb-dot s-on"></span>知识库状态</button>
+
+  <div style="flex:1"></div>
+  <div style="padding:10px 14px;font-size:10px;color:var(--t3);border-top:.5px solid var(--b1)">v2 · 2026.03 · 双前端审查版</div>
+</div>
+
+<!-- ─ Main ─ -->
+<div class="main">
+<div id="notif" class="notif"></div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 运行时仪表盘
+══════════════════════════════════════════ -->
+<div id="v-rt-dash" class="view on">
+  <h2>运行时仪表盘 <span class="badge b-blue">用户前端 · 操作员视角</span></h2>
+  <!-- Stats row -->
+  <div class="g4 mb12">
+    <div class="stat"><div class="stat-v" style="color:var(--green)">47</div><div class="stat-l">今日已处理报警</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--blue)">89%</div><div class="stat-l">自动标注命中率</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--amber)">3</div><div class="stat-l">待人工确认</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--t1)">12,840</div><div class="stat-l">图谱关系总数</div></div>
+  </div>
+  <div class="g2">
+    <!-- 实时事件流 -->
+    <div class="card">
+      <h3>实时事件流 <span class="badge b-gray" style="font-size:10px">● 实时</span></h3>
+      <div id="ev-feed"></div>
+      <div style="text-align:center;margin-top:8px"><button class="btn btn-sm" onclick="addEvent()">+ 模拟新事件</button></div>
+    </div>
+    <!-- 当前决策建议 -->
+    <div class="card">
+      <h3>当前活跃决策建议</h3>
+      <div id="decisions"></div>
+    </div>
+  </div>
+  <div class="card mt10">
+    <h3>标注来源分布（今日）</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">IoT 自动抽取</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="cbar"><div class="cfill cf-high" style="width:78%"></div></div>
+          <span style="font-size:11px;font-weight:500;color:var(--green)">78%</span>
+        </div>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">用户提示确认</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="cbar"><div class="cfill cf-mid" style="width:14%"></div></div>
+          <span style="font-size:11px;font-weight:500;color:var(--amber)">14%</span>
+        </div>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">专家手动输入</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="cbar"><div class="cfill cf-low" style="width:8%"></div></div>
+          <span style="font-size:11px;font-weight:500;color:var(--red)">8%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 自动标注监控
+══════════════════════════════════════════ -->
+<div id="v-rt-auto" class="view">
+  <h2>自动标注监控 <span class="badge b-green">置信度 ≥ 0.80 自动写入</span></h2>
+  <div class="muted mb12">以下关系由系统从 IoT 事件 / LLM 抽取自动写入图谱，无需人工干预。实时更新，可追溯。</div>
+  <div class="card mb10">
+    <h3>自动标注规则配置</h3>
+    <table class="tbl mt8">
+      <thead><tr><th>来源类型</th><th>置信度阈值</th><th>自动写入</th><th>通知用户</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge b-blue">IoT 规则抽取</span></td><td>≥ 0.90</td><td><span class="badge b-green">是</span></td><td>否</td><td><button class="btn btn-sm">配置</button></td></tr>
+        <tr><td><span class="badge b-teal">LLM 文档抽取</span></td><td>≥ 0.80</td><td><span class="badge b-green">是</span></td><td><span class="badge b-amber">提醒</span></td><td><button class="btn btn-sm">配置</button></td></tr>
+        <tr><td><span class="badge b-purple">LLM 对话抽取</span></td><td>-</td><td><span class="badge b-red">否</span></td><td><span class="badge b-amber">待审批</span></td><td><button class="btn btn-sm">配置</button></td></tr>
+        <tr><td><span class="badge b-gray">历史统计</span></td><td>≥ 0.75</td><td><span class="badge b-amber">待确认</span></td><td><span class="badge b-amber">提醒</span></td><td><button class="btn btn-sm">配置</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <h3>最近自动写入（高置信度）</h3>
+      <div id="auto-log"></div>
+    </div>
+    <div class="card">
+      <h3>自动标注质量追踪</h3>
+      <div class="muted" style="margin-bottom:8px">基于用户后续反馈计算</div>
+      <div class="g2 mt8">
+        <div class="stat"><div class="stat-v" style="color:var(--green)">94.2%</div><div class="stat-l">IoT规则准确率</div></div>
+        <div class="stat"><div class="stat-v" style="color:var(--blue)">81.7%</div><div class="stat-l">LLM文档准确率</div></div>
+      </div>
+      <div class="div"></div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.7">
+        过去 7 天：用户否定了 23 条自动写入关系（占总量 1.8%）<br>
+        否定最多的关系类型：<span class="badge b-amber">INDICATES</span> 共 14 次<br>
+        建议降低 INDICATES 类型的自动写入阈值至 0.85
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 提示标注工作区（Human-in-loop）
+══════════════════════════════════════════ -->
+<div id="v-rt-prompt" class="view">
+  <h2>提示标注工作区 <span class="badge b-amber">置信度 0.50–0.79 · 需人工确认</span></h2>
+  <div class="muted mb12">以下关系系统无法自信地判断，请您结合现场经验确认。每次确认都会强化系统的学习。</div>
+
+  <!-- Filter bar -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <span class="muted">筛选：</span>
+    <div id="ann-filter">
+      <span class="chip on" onclick="toggleFilter(this,'all')">全部 (6)</span>
+      <span class="chip" onclick="toggleFilter(this,'alarm')">报警类 (3)</span>
+      <span class="chip" onclick="toggleFilter(this,'quality')">质量类 (2)</span>
+      <span class="chip" onclick="toggleFilter(this,'wo')">工单类 (1)</span>
+    </div>
+    <div style="flex:1"></div>
+    <button class="btn btn-sm btn-ok" onclick="approveAll()">全部确认</button>
+    <button class="btn btn-sm" onclick="skipAll()">跳过全部</button>
+  </div>
+
+  <div id="ann-queue"></div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 公开知识标注
+══════════════════════════════════════════ -->
+<div id="v-kb-public" class="view">
+  <h2>公开知识标注 <span class="layer-pill lp1">知识层 1 · Public Knowledge</span></h2>
+  <div class="muted mb12">从行业标准、学术文献、公开手册中抽取关系知识，构建领域通用本体基础层。</div>
+
+  <div class="g2 mb12">
+    <!-- 文本输入/粘贴 -->
+    <div class="card">
+      <h3>输入文本片段</h3>
+      <div style="margin-bottom:8px">
+        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="loadSample('bearing')">示例：轴承故障</button>
+          <button class="btn btn-sm" onclick="loadSample('quality')">示例：质量管控</button>
+          <button class="btn btn-sm" onclick="loadSample('oee')">示例：OEE分析</button>
+        </div>
+        <textarea id="pub-text" rows="7" placeholder="粘贴或输入行业文献、标准手册文本..."></textarea>
+      </div>
+      <div style="display:flex;gap:6px">
+        <select id="pub-source" style="flex:1"><option>ISO 标准</option><option>行业白皮书</option><option>学术论文</option><option>设备手册</option></select>
+        <button class="btn btn-p" onclick="autoExtract()">AI 预标注</button>
+      </div>
+    </div>
+    <!-- 实体类型图例 -->
+    <div class="card">
+      <h3>实体类型 · 颜色图例</h3>
+      <div style="margin-bottom:10px;display:flex;flex-direction:column;gap:5px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent-span ent-machine">Machine / 设备</span><span class="muted">物理设备实体</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent-span ent-alarm">Alarm / 报警</span><span class="muted">故障信号类型</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent-span ent-issue">Issue / 问题</span><span class="muted">根因/问题类型</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent-span ent-wo">WorkOrder / 工单</span><span class="muted">生产工单</span></div>
+      </div>
+      <div class="div"></div>
+      <h3>关系类型选择</h3>
+      <div id="rel-chips" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- 标注预览 -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h3>标注预览 & 提取关系</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-ok" onclick="commitPublic()">提交到图谱</button>
+        <button class="btn btn-sm" onclick="clearPub()">清除</button>
+      </div>
+    </div>
+    <div id="pub-preview" class="doc-chunk" style="min-height:60px;color:var(--t2)">点击「AI 预标注」后在此预览实体和关系...</div>
+    <div id="pub-rels" class="mt8"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 专家知识采集
+══════════════════════════════════════════ -->
+<div id="v-kb-expert" class="view">
+  <h2>专家知识采集 <span class="layer-pill lp2">知识层 2 · Expert Knowledge</span></h2>
+  <div class="muted mb12">通过结构化访谈引导专家将隐性经验转化为可计算的关系知识。系统根据回答自动生成候选关系，专家确认后写入图谱。</div>
+
+  <div class="g2 mb12">
+    <div class="card">
+      <h3>选择访谈场景</h3>
+      <div id="exp-scenarios" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3>专家信息</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+        <div><div class="muted" style="margin-bottom:3px">姓名 / 职位</div><input type="text" placeholder="如：张伟 / 高级维修工程师" style="width:100%;border:.5px solid var(--b2);border-radius:var(--rm);padding:5px 8px;font-size:12px;background:var(--bg);color:var(--t1)"></div>
+        <div><div class="muted" style="margin-bottom:3px">工作年限</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="exp-years" min="1" max="30" value="10" style="flex:1" oninput="document.getElementById('ey-v').textContent=this.value+'年'">
+            <span id="ey-v" style="font-size:12px;font-weight:500;min-width:30px">10年</span>
+          </div>
+        </div>
+        <div><div class="muted" style="margin-bottom:3px">专业领域</div>
+          <select style="width:100%"><option>机械维修</option><option>电气控制</option><option>工艺工程</option><option>质量管理</option><option>生产调度</option></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interview Q&A -->
+  <div class="card mb10">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3>结构化访谈 <span id="exp-sc-name" style="color:var(--blue)">（请先选择场景）</span></h3>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="muted">问题 <span id="q-cur">1</span> / <span id="q-tot">3</span></span>
+        <button class="btn btn-sm btn-p" onclick="nextQ()">下一问题 →</button>
+      </div>
+    </div>
+    <div id="interview-q"></div>
+  </div>
+
+  <!-- Extracted relations from interview -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <h3>从访谈提取的候选关系 <span id="exp-rel-cnt" style="color:var(--blue)">0</span> 条</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-ok" onclick="commitExpert()">提交已确认关系</button>
+      </div>
+    </div>
+    <div id="exp-rels"><div class="muted" style="text-align:center;padding:16px">完成访谈后，系统将在此展示候选关系供您审核</div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 企业文档标注
+══════════════════════════════════════════ -->
+<div id="v-kb-doc" class="view">
+  <h2>企业文档标注 <span class="layer-pill lp3">知识层 3 · Enterprise Docs</span></h2>
+  <div class="muted mb12">上传企业内部文档（SOP、维修记录、FMEA、工艺规程），系统 LLM 预标注后由人工审核确认，确保知识准确性。</div>
+
+  <div class="g2 mb12">
+    <!-- 文档队列 -->
+    <div class="card">
+      <h3>文档队列</h3>
+      <div id="doc-queue" class="mt8"></div>
+      <div class="upz mt8" onclick="simDocUpload()">
+        <div style="font-size:18px;margin-bottom:6px;color:var(--t3)">↑</div>
+        <div style="font-size:12px;font-weight:500;color:var(--t1)">点击上传企业文档</div>
+        <div class="muted" style="margin-top:4px">支持 PDF · Word · Excel · TXT</div>
+      </div>
+    </div>
+    <!-- 预标注统计 -->
+    <div class="card">
+      <h3>预标注处理统计</h3>
+      <div class="g2 mt8">
+        <div class="stat"><div class="stat-v" style="color:var(--blue)">5</div><div class="stat-l">已处理文档</div></div>
+        <div class="stat"><div class="stat-v" style="color:var(--amber)">124</div><div class="stat-l">待审核关系</div></div>
+        <div class="stat"><div class="stat-v" style="color:var(--green)">89</div><div class="stat-l">已确认关系</div></div>
+        <div class="stat"><div class="stat-v" style="color:var(--red)">11</div><div class="stat-l">已拒绝关系</div></div>
+      </div>
+      <div class="div"></div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.7">
+        LLM 预标注准确率（基于已审核）：<strong style="color:var(--green)">88.9%</strong><br>
+        平均每文档耗时：<strong>约 2.5 分钟</strong>人工审核<br>
+        最多被拒原因：关系方向错误（7次），错误实体类型（4次）
+      </div>
+    </div>
+  </div>
+
+  <!-- 文档标注工作区 -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h3>标注工作区 · <span id="doc-name" style="color:var(--blue)">设备说明书_M1.pdf</span></h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-ok" onclick="batchApprove()">批量通过</button>
+        <button class="btn btn-sm btn-p" onclick="commitDocs()">提交已审核</button>
+      </div>
+    </div>
+    <!-- Document preview with entities -->
+    <div class="doc-chunk mb8">
+      当 <span class="ent-span ent-machine" onclick="pickEnt(this)">1号注塑机</span> 发生 <span class="ent-span ent-alarm" onclick="pickEnt(this)">过热报警</span> 时，最常见的根本原因是 <span class="ent-span ent-issue" onclick="pickEnt(this)">轴承磨损</span>，尤其在环境温度高于 35°C 的条件下。处理步骤包括：立即降低 <span class="ent-span ent-machine" onclick="pickEnt(this)">1号注塑机</span> 转速，检查 <span class="ent-span ent-issue" onclick="pickEnt(this)">冷却液水位</span>，并通知维修班组创建 <span class="ent-span ent-wo" onclick="pickEnt(this)">维修工单</span>。
+    </div>
+    <div class="doc-chunk mb8">
+      历史数据表明，<span class="ent-span ent-alarm" onclick="pickEnt(this)">振动报警</span> 与 <span class="ent-span ent-issue" onclick="pickEnt(this)">轴承磨损</span> 的关联度达到 91%，建议在 <span class="ent-span ent-alarm" onclick="pickEnt(this)">振动报警</span> 出现后 30 分钟内完成轴承检查，否则可能导致 <span class="ent-span ent-wo" onclick="pickEnt(this)">生产工单</span> 延误。
+    </div>
+
+    <!-- Extracted relations for review -->
+    <h3 style="margin-bottom:7px">LLM 预标注关系 · 待审核</h3>
+    <div id="doc-rels"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     VIEW: 知识库状态
+══════════════════════════════════════════ -->
+<div id="v-kb-status" class="view">
+  <h2>知识库状态 <span class="badge b-green">● 运行中</span></h2>
+
+  <!-- Overall stats -->
+  <div class="g4 mb12">
+    <div class="stat"><div class="stat-v" style="color:var(--blue)">12,840</div><div class="stat-l">活跃关系总数</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--green)">0.76</div><div class="stat-l">平均置信度</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--amber)">234</div><div class="stat-l">待审核关系</div></div>
+    <div class="stat"><div class="stat-v" style="color:var(--t2)">89</div><div class="stat-l">已衰减废弃</div></div>
+  </div>
+
+  <div class="g2 mb10">
+    <!-- Source distribution -->
+    <div class="card">
+      <h3>来源分布</h3>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>IoT 自动抽取</span><span class="badge b-blue">7,892 条</span></div>
+          <div class="cbar"><div class="cfill cf-high" style="width:61%"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>企业文档（LLM+审核）</span><span class="badge b-teal">2,340 条</span></div>
+          <div class="cbar"><div class="cfill" style="width:18%;background:var(--teal)"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>专家直接输入</span><span class="badge b-purple">1,450 条</span></div>
+          <div class="cbar"><div class="cfill" style="width:11%;background:var(--purple)"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>公开知识标注</span><span class="badge b-amber">820 条</span></div>
+          <div class="cbar"><div class="cfill cf-mid" style="width:6%"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>用户提示标注</span><span class="badge b-gray">338 条</span></div>
+          <div class="cbar"><div class="cfill cf-low" style="width:3%"></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- Relation type distribution -->
+    <div class="card">
+      <h3>关系类型分布（Top 8）</h3>
+      <table class="tbl mt8">
+        <thead><tr><th>关系类型</th><th>数量</th><th>平均置信度</th></tr></thead>
+        <tbody id="rel-type-dist"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 三层知识结构健康度 -->
+  <div class="card">
+    <h3>三层知识结构健康度</h3>
+    <div class="g3 mt8" id="layer-health"></div>
+  </div>
+</div>
+
+</div><!-- end main -->
+</div><!-- end app -->
+
+<script>
+// ─ State ─
+let qIdx=0;
+let expScenario=null;
+let expRels=[];
+let docRels=[];
+let annQueue=[];
+let evFeed=[];
+let selRelType='INDICATES';
+
+const relTypes=['INDICATES','CAUSES','AFFECTS','BLOCKS','PRODUCES','DEPENDS_ON','OPERATES','DEPLETES'];
+const scenarios=[
+  {id:0,name:'设备故障分析',qs:[
+    {q:'在您的经验中，过热报警最常见的根本原因是什么？请列举前3位。',ph:'例如：轴承磨损、冷却液不足、转速过高...'},
+    {q:'哪些设备特征（型号、使用年限、工况）会影响故障发生概率？',ph:'例如：老设备轴承故障率更高，高负载工况下冷却问题更常见...'},
+    {q:'遇到过热报警后，您的标准处置步骤是什么？有哪些关键判断节点？',ph:'例如：先确认温度数值，超过85°C立即停机；再检查冷却液，水位低于标线则补液...'},
+  ]},
+  {id:1,name:'工单延误分析',qs:[
+    {q:'工单延误最常见的直接原因有哪些？设备问题、物料短缺还是人员问题？',ph:''},
+    {q:'哪类设备停机对工单影响最大？',ph:''},
+    {q:'您如何在工单开始前预判延误风险？',ph:''},
+  ]},
+  {id:2,name:'质量异常分析',qs:[
+    {q:'这类缺陷最可能出现在哪个工序？有无规律性？',ph:''},
+    {q:'物料批次与质量异常有关联吗？如何判断？',ph:''},
+    {q:'操作员技能水平对质量有多大影响？哪些操作最容易出错？',ph:''},
+  ]},
+];
+
+const autoLogData=[
+  {f:'Machine_M1',r:'PRODUCES',t:'Alarm_Overheat',c:0.95,src:'IoT',ts:'10:23'},
+  {f:'Alarm_Overheat',r:'INDICATES',t:'BearingWear',c:0.87,src:'LLM文档',ts:'10:24'},
+  {f:'Machine_M2',r:'PRODUCES',t:'Alarm_Vibration',c:0.93,src:'IoT',ts:'10:31'},
+  {f:'Alarm_Vibration',r:'INDICATES',t:'BearingWear',c:0.91,src:'IoT',ts:'10:31'},
+  {f:'WorkOrder_WO042',r:'BLOCKED_BY',t:'Machine_M1',c:0.88,src:'规则',ts:'10:35'},
+];
+
+const docRelData=[
+  {f:'过热报警',r:'INDICATES',t:'轴承磨损',c:0.91,ctx:'高温环境',st:'pending'},
+  {f:'过热报警',r:'INDICATES',t:'冷却液不足',c:0.74,ctx:'通用',st:'pending'},
+  {f:'振动报警',r:'INDICATES',t:'轴承磨损',c:0.89,ctx:'通用',st:'approved'},
+  {f:'轴承磨损',r:'CAUSES',t:'过热报警',c:0.85,ctx:'通用',st:'pending'},
+  {f:'维修工单',r:'AFFECTS',t:'生产工单',c:0.78,ctx:'通用',st:'rejected'},
+];
+
+const relTypeDist=[
+  ['INDICATES','4,231','0.79'],['PRODUCES','3,120','0.94'],['CAUSES','1,840','0.72'],
+  ['AFFECTS','1,200','0.68'],['BLOCKS','890','0.81'],['DEPENDS_ON','630','0.76'],
+  ['OPERATES','580','0.88'],['DEPLETES','349','0.71'],
+];
+
+// ─ Init ─
+function init(){
+  buildAutoLog(); buildDocRels(); buildAnnQueue();
+  buildRelChips(); buildExpScenarios(); buildInterviewQ();
+  buildRelTypeDist(); buildLayerHealth(); buildDecisions();
+  buildEvFeed(); buildDocQueue();
+}
+
+// ─ Navigation ─
+function sw(id,btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('v-'+id).classList.add('on');
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('act'));
+  btn.classList.add('act');
+}
+
+function toast(msg,color='#185FA5'){
+  const n=document.getElementById('notif');
+  n.textContent=msg;n.style.background=color;n.style.display='block';
+  setTimeout(()=>n.style.display='none',2500);
+}
+
+// ─ Runtime Dashboard ─
+const evTypes=[
+  {type:'auto',icon:'●',label:'过热报警 M1',rel:{f:'Machine_M1',r:'PRODUCES',t:'Alarm_Overheat'},c:0.95},
+  {type:'prompt',icon:'◎',label:'振动异常 M3',rel:{f:'Machine_M3',r:'INDICATES',t:'BearingWear'},c:0.62},
+  {type:'auto',icon:'●',label:'工单 WO-043 延误',rel:{f:'Alarm_Overheat',r:'AFFECTS',t:'WorkOrder_WO043'},c:0.83},
+  {type:'new',icon:'◈',label:'库存低位预警',rel:{f:'Material_BRG',r:'DEPLETES',t:'Inventory_BRG'},c:0.77},
+];
+let evIdx=0;
+function buildEvFeed(){
+  const feed=document.getElementById('ev-feed');
+  feed.innerHTML=evTypes.slice(0,3).map((e,i)=>`
+    <div class="ev-item ev-${e.type}" style="animation-delay:${i*.1}s">
+      <div class="ev-time">${['10:23','10:24','10:31'][i]} · ${e.type==='auto'?'自动标注':e.type==='prompt'?'待确认':'新事件'}</div>
+      <div style="font-weight:500;color:var(--t1)">${e.label}</div>
+      <div class="ev-rel">
+        <span class="rnode">${e.rel.f}</span>
+        <span style="font-size:10px;color:var(--t2)">→ ${e.rel.r} →</span>
+        <span class="rnode">${e.rel.t}</span>
+        <div class="cbar" style="max-width:50px"><div class="cfill ${e.c>=0.8?'cf-high':e.c>=0.65?'cf-mid':'cf-low'}" style="width:${e.c*100}%"></div></div>
+        <span style="font-size:10px;font-weight:500">${e.c.toFixed(2)}</span>
+        ${e.type==='auto'?`<span class="badge b-green" style="font-size:9px">自动写入</span>`:`<span class="badge b-amber" style="font-size:9px">待确认</span>`}
+      </div>
+    </div>`).join('');
+}
+function addEvent(){
+  const ev=evTypes[evIdx%evTypes.length];evIdx++;
+  const feed=document.getElementById('ev-feed');
+  const el=document.createElement('div');
+  el.className=`ev-item ev-${ev.type}`;
+  el.innerHTML=`<div class="ev-time">${new Date().toTimeString().slice(0,5)} · ${ev.type==='auto'?'自动标注':'待确认'}</div>
+    <div style="font-weight:500">${ev.label}</div>
+    <div class="ev-rel"><span class="rnode">${ev.rel.f}</span><span style="font-size:10px;color:var(--t2)">→ ${ev.rel.r} →</span><span class="rnode">${ev.rel.t}</span>
+    <span class="badge ${ev.c>=0.8?'b-green':'b-amber'}" style="font-size:9px">${ev.c.toFixed(2)}</span></div>`;
+  feed.prepend(el);
+  toast('新事件：'+ev.label);
+}
+function buildDecisions(){
+  document.getElementById('decisions').innerHTML=`
+    <div class="ann-card" style="border-left:3px solid var(--amber)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span class="badge b-amber">待确认</span><span style="font-size:10px;color:var(--t3)">优先级：高</span>
+      </div>
+      <div style="font-weight:500;font-size:13px;margin-bottom:6px">1号机过热 → 建议暂停设备</div>
+      <div class="ann-src">触发：<em>过热报警</em> 已持续 12 分钟<br>图谱推断：<em>轴承磨损</em> 可能性 87%<br>影响：<em>工单WO-043</em> 延误风险 74%</div>
+      <div class="ann-actions">
+        <button class="btn btn-ok btn-sm" onclick="toast('已确认：暂停1号机','#3B6D11')">✓ 确认执行</button>
+        <button class="btn btn-no btn-sm" onclick="toast('已拒绝，请手动处理','#A32D2D')">✗ 拒绝</button>
+        <button class="btn btn-sm" onclick="toast('已转交给班组长')">转交</button>
+      </div>
+    </div>
+    <div class="ann-card" style="border-left:3px solid var(--blue)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span class="badge b-blue">低置信度·待审</span><span style="font-size:10px;color:var(--t3)">置信度：0.61</span>
+      </div>
+      <div style="font-weight:500;font-size:13px;margin-bottom:6px">振动报警 M3 → 根因？</div>
+      <div class="ann-src">系统不确定：<em>轴承磨损</em>(0.61) vs <em>安装偏差</em>(0.39)<br>历史仅 3 次相似案例</div>
+      <div class="ann-actions">
+        <button class="btn btn-sm" onclick="toast('已跳转至提示标注')">去标注 →</button>
+      </div>
+    </div>`;
+}
+
+// ─ Auto annotation log ─
+function buildAutoLog(){
+  document.getElementById('auto-log').innerHTML=autoLogData.map(r=>`
+    <div class="rrow">
+      <span class="rnode" style="font-size:10px">${r.f}</span>
+      <span style="font-size:10px;color:var(--t2)">→${r.r}→</span>
+      <span class="rnode" style="font-size:10px">${r.t}</span>
+      <div class="cbar" style="flex:1"><div class="cfill cf-high" style="width:${r.c*100}%"></div></div>
+      <span style="font-size:10px;color:var(--green);min-width:28px">${r.c}</span>
+      <span class="badge b-gray" style="font-size:9px">${r.src}</span>
+      <span style="font-size:10px;color:var(--t3)">${r.ts}</span>
+    </div>`).join('');
+}
+
+// ─ Annotation queue (prompted) ─
+function buildAnnQueue(){
+  annQueue=[
+    {id:0,cat:'alarm',src:'振动异常 M3 (10:31) — SCADA 事件日志',f:'Alarm_Vibration',r:'INDICATES',t:'BearingWear',c:0.62,why:'仅观测3次，证据不足',st:'pending'},
+    {id:1,cat:'alarm',src:'高电流 M2 (09:45) — 控制系统日志',f:'Alarm_HighCurrent',r:'INDICATES',t:'MotorOverload',c:0.68,why:'与历史案例部分匹配',st:'pending'},
+    {id:2,cat:'quality',src:'质检结果 BATCH-221 — QMS 导出',f:'Process_P3',r:'CAUSES',t:'Defect_DimError',c:0.57,why:'工艺参数偏离，根因不确定',st:'pending'},
+    {id:3,cat:'quality',src:'维修记录 2026-01-15 — CMMS',f:'Machine_M4',r:'AFFECTS',t:'Quality_Batch',c:0.71,why:'关联度偏低，需专家确认',st:'pending'},
+    {id:4,cat:'alarm',src:'压力下降 M5 (11:02) — SCADA',f:'Alarm_PressureDrop',r:'INDICATES',t:'SealFailure',c:0.59,why:'首次出现此类报警',st:'pending'},
+    {id:5,cat:'wo',src:'工单 WO-041 延误 — MES',f:'Alarm_Overheat',r:'AFFECTS',t:'WorkOrder_WO041',c:0.73,why:'间接影响，置信度中等',st:'pending'},
+  ];
+  renderAnnQueue();
+}
+function renderAnnQueue(){
+  document.getElementById('ann-queue').innerHTML=annQueue.filter(a=>a.st==='pending').map(a=>`
+    <div class="ann-card" id="ac${a.id}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="badge ${a.c<0.65?'b-red':a.c<0.75?'b-amber':'b-blue'}">${a.c.toFixed(2)} 置信度</span>
+          <span class="badge b-gray">${a.cat==='alarm'?'报警类':a.cat==='quality'?'质量类':'工单类'}</span>
+        </div>
+        <span style="font-size:10px;color:var(--t3)">不确定原因：${a.why}</span>
+      </div>
+      <div class="ann-src" style="margin-bottom:8px">来源：${a.src}</div>
+      <div class="rrow" style="margin-bottom:8px">
+        <span class="rnode">${a.f}</span>
+        <span style="font-size:11px;color:var(--t2)">→ ${a.r} →</span>
+        <span class="rnode">${a.t}</span>
+        <div class="cbar" style="flex:1"><div class="cfill ${a.c<0.65?'cf-low':a.c<0.75?'cf-mid':'cf-high'}" style="width:${a.c*100}%"></div></div>
+      </div>
+      <div class="ann-actions">
+        <button class="btn btn-ok btn-sm" onclick="annAct(${a.id},'approve')">✓ 正确，写入</button>
+        <button class="btn btn-no btn-sm" onclick="annAct(${a.id},'reject')">✗ 错误</button>
+        <button class="btn btn-sm" onclick="annAct(${a.id},'modify')">✎ 修改关系类型</button>
+        <button class="btn btn-sm" onclick="annAct(${a.id},'skip')">跳过</button>
+      </div>
+    </div>`).join('') || '<div class="muted" style="text-align:center;padding:20px">所有待标注项已处理</div>';
+}
+function annAct(id,act){
+  const msgs={approve:'已确认并写入图谱 ✓',reject:'已拒绝，置信度下调',modify:'请在弹窗中选择正确类型',skip:'已跳过，稍后再处理'};
+  annQueue.find(a=>a.id===id).st=act==='skip'?'pending':act;
+  if(act!=='skip') renderAnnQueue();
+  toast(msgs[act],act==='approve'?'#3B6D11':act==='reject'?'#A32D2D':'#185FA5');
+}
+function approveAll(){annQueue.forEach(a=>a.st='approve');renderAnnQueue();toast('已全部确认写入','#3B6D11');}
+function skipAll(){toast('已跳过全部，回到待处理状态');}
+function toggleFilter(el,cat){
+  document.querySelectorAll('#ann-filter .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+
+// ─ Public knowledge ─
+function buildRelChips(){
+  document.getElementById('rel-chips').innerHTML=relTypes.map(r=>`
+    <span class="chip ${r===selRelType?'on':''}" onclick="selRT('${r}',this)">${r}</span>`).join('');
+}
+function selRT(r,el){
+  selRelType=r;
+  document.querySelectorAll('#rel-chips .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+const samples={
+  bearing:'当轴承出现过热症状时，通常由三种因素导致：润滑不足（占比约45%）、过载运行（约30%）、或安装偏差（约25%）。过热报警持续超过15分钟，应立即停机检查，否则可能导致轴承完全失效，造成设备停机并影响相关生产工单的完成时间。',
+  quality:'注塑工艺中，熔体温度偏高是造成尺寸超差的首要因素，其次是保压压力不稳和模具温度波动。建议在工单开始前检查工艺参数是否在规格范围内，尤其是材料批次切换后应重新确认温度设定。',
+  oee:'设备综合效率（OEE）下降的三大原因：可用率损失（计划外停机）、性能损失（速度损失）和质量损失（不良品）。分析显示，过热报警引发的计划外停机是本季度可用率损失的主要贡献，平均每次停机造成0.8%的OEE下降。'
+};
+function loadSample(k){
+  document.getElementById('pub-text').value=samples[k];
+}
+function autoExtract(){
+  const text=document.getElementById('pub-text').value;
+  if(!text.trim()){toast('请先输入或粘贴文本','#A32D2D');return;}
+  document.getElementById('pub-preview').innerHTML=text
+    .replace(/(过热报警|振动报警|压力下降)/g,'<span class="ent-span ent-alarm">$1</span>')
+    .replace(/(轴承磨损|轴承失效|安装偏差|润滑不足|尺寸超差)/g,'<span class="ent-span ent-issue">$1</span>')
+    .replace(/(生产工单|工单|设备停机)/g,'<span class="ent-span ent-wo">$1</span>')
+    .replace(/(注塑机|设备|机器|轴承)/g,'<span class="ent-span ent-machine">$1</span>');
+  document.getElementById('pub-rels').innerHTML=`
+    <h3 style="margin-bottom:7px">AI 提取候选关系（请审核）</h3>
+    <div class="rel-pending">
+      <span class="rnode">过热报警</span><span style="font-size:10px;color:var(--t2)">→ INDICATES →</span><span class="rnode">轴承磨损</span>
+      <div style="flex:1"></div><span class="badge b-amber">0.82</span>
+      <button class="btn btn-ok btn-sm" onclick="toast('已写入','#3B6D11')">✓</button><button class="btn btn-no btn-sm">✗</button>
+    </div>
+    <div class="rel-pending">
+      <span class="rnode">过热报警</span><span style="font-size:10px;color:var(--t2)">→ AFFECTS →</span><span class="rnode">生产工单</span>
+      <div style="flex:1"></div><span class="badge b-amber">0.71</span>
+      <button class="btn btn-ok btn-sm" onclick="toast('已写入','#3B6D11')">✓</button><button class="btn btn-no btn-sm">✗</button>
+    </div>
+    <div class="rel-pending">
+      <span class="rnode">轴承磨损</span><span style="font-size:10px;color:var(--t2)">→ CAUSES →</span><span class="rnode">过热报警</span>
+      <div style="flex:1"></div><span class="badge b-blue">0.88</span>
+      <button class="btn btn-ok btn-sm" onclick="toast('已写入','#3B6D11')">✓</button><button class="btn btn-no btn-sm">✗</button>
+    </div>`;
+  toast('AI 预标注完成，请审核');
+}
+function commitPublic(){toast('已提交至 RelOS 公开知识层','#3B6D11');}
+function clearPub(){document.getElementById('pub-text').value='';document.getElementById('pub-preview').innerHTML='点击「AI 预标注」后在此预览...';document.getElementById('pub-rels').innerHTML='';}
+function pickEnt(el){toast('实体已选中：'+el.textContent+' ('+el.className.split(' ').pop()+')');}
+
+// ─ Expert interview ─
+function buildExpScenarios(){
+  document.getElementById('exp-scenarios').innerHTML=scenarios.map(s=>`
+    <div class="card" style="cursor:pointer;margin-bottom:6px;border:1.5px solid transparent;transition:border-color .15s" onclick="selectScenario(${s.id},this)" id="es${s.id}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge b-purple">${s.name}</span>
+        <span class="muted" style="font-size:11px">${s.qs.length} 个问题</span>
+      </div>
+    </div>`).join('');
+}
+function selectScenario(id,el){
+  document.querySelectorAll('[id^=es]').forEach(e=>e.style.borderColor='transparent');
+  el.style.borderColor='var(--blue)';
+  expScenario=scenarios[id];
+  document.getElementById('exp-sc-name').textContent=expScenario.name;
+  document.getElementById('q-tot').textContent=expScenario.qs.length;
+  qIdx=0;expRels=[];
+  renderInterviewQ();
+  document.getElementById('exp-rels').innerHTML='<div class="muted" style="text-align:center;padding:16px">回答问题后，候选关系将在此显示</div>';
+  document.getElementById('exp-rel-cnt').textContent='0';
+}
+function buildInterviewQ(){
+  document.getElementById('interview-q').innerHTML=`<div class="qcard"><div class="q-num">请先选择左侧场景</div><div class="q-text">选择访谈场景后，结构化问题将在此显示。</div></div>`;
+}
+function renderInterviewQ(){
+  if(!expScenario) return;
+  const q=expScenario.qs[qIdx];
+  document.getElementById('q-cur').textContent=qIdx+1;
+  document.getElementById('interview-q').innerHTML=`
+    <div class="qcard">
+      <div class="q-num">问题 ${qIdx+1} / ${expScenario.qs.length}</div>
+      <div class="q-text">${q.q}</div>
+      <textarea id="exp-ans" placeholder="${q.ph||'请用您自己的语言描述...'}" rows="4"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-p btn-sm" onclick="submitAnswer()">提取关系 →</button>
+      </div>
+    </div>`;
+}
+function submitAnswer(){
+  const ans=document.getElementById('exp-ans')?.value;
+  if(!ans||ans.trim().length<5){toast('请填写回答后再提取','#A32D2D');return;}
+  // Simulate extraction
+  const sampleRels=[
+    [{f:'过热报警',r:'INDICATES',t:'轴承磨损',c:0.82},{f:'轴承磨损',r:'CAUSES',t:'设备停机',c:0.75}],
+    [{f:'设备停机',r:'AFFECTS',t:'生产工单',c:0.88},{f:'过热报警',r:'INDICATES',t:'冷却液不足',c:0.63}],
+    [{f:'轴承磨损',r:'INDICATES',t:'过热报警',c:0.79},{f:'过热报警',r:'BLOCKS',t:'Production',c:0.84}],
+  ];
+  const newRels=sampleRels[qIdx%sampleRels.length];
+  expRels=[...expRels,...newRels];
+  document.getElementById('exp-rel-cnt').textContent=expRels.length;
+  document.getElementById('exp-rels').innerHTML=expRels.map((r,i)=>`
+    <div class="rrow">
+      <span class="rnode" style="font-size:10px">${r.f}</span>
+      <span style="font-size:10px;color:var(--t2)">→ ${r.r} →</span>
+      <span class="rnode" style="font-size:10px">${r.t}</span>
+      <div class="cbar" style="flex:1"><div class="cfill ${r.c>=0.8?'cf-high':'cf-mid'}" style="width:${r.c*100}%"></div></div>
+      <span style="font-size:10px;font-weight:500;min-width:28px">${r.c.toFixed(2)}</span>
+      <span class="badge b-purple" style="font-size:9px">专家</span>
+      <button class="btn btn-ok btn-sm" onclick="this.parentNode.style.opacity='.5';toast('已确认','#3B6D11')">✓</button>
+      <button class="btn btn-no btn-sm" onclick="this.parentNode.remove()">✗</button>
+    </div>`).join('');
+  toast('已从回答中提取 '+newRels.length+' 条候选关系');
+  nextQ();
+}
+function nextQ(){
+  if(!expScenario){toast('请先选择场景','#A32D2D');return;}
+  if(qIdx<expScenario.qs.length-1){qIdx++;renderInterviewQ();}
+  else{toast('所有问题已完成！请审核候选关系','#3B6D11');}
+}
+function commitExpert(){toast('已提交 '+expRels.length+' 条关系至 RelOS 专家知识层','#3B6D11');}
+
+// ─ Document annotation ─
+function buildDocQueue(){
+  const docs=[
+    {n:'设备说明书_M1.pdf',st:'done',r:28,a:23},
+    {n:'故障代码手册_V3.pdf',st:'processing',r:0,a:0},
+    {n:'SOP_焊接工艺.docx',st:'queued',r:0,a:0},
+    {n:'FMEA_注塑线.xlsx',st:'queued',r:0,a:0},
+  ];
+  document.getElementById('doc-queue').innerHTML=docs.map(d=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:.5px solid var(--b1);font-size:12px;cursor:pointer" onclick="loadDoc('${d.n}')">
+      <div class="sdot ${d.st==='done'?'s-on':d.st==='processing'?'s-mid':'s-off'}"></div>
+      <div style="flex:1;font-weight:${d.st==='done'?'500':'400'}">${d.n}</div>
+      <div class="muted">${d.st==='done'?`${d.r}条/${d.a}已审`:d.st==='processing'?'处理中':'排队'}</div>
+    </div>`).join('');
+}
+function loadDoc(name){
+  document.getElementById('doc-name').textContent=name;
+  toast('已加载：'+name);
+}
+function buildDocRels(){
+  document.getElementById('doc-rels').innerHTML=docRelData.map((r,i)=>`
+    <div class="rel-pending ${r.st==='approved'?'rel-ok':r.st==='rejected'?'rel-rej':''}" id="dr${i}">
+      <span class="rnode" style="font-size:10px">${r.f}</span>
+      <span style="font-size:10px;color:var(--t2)">→ ${r.r} →</span>
+      <span class="rnode" style="font-size:10px">${r.t}</span>
+      <span class="badge b-gray" style="font-size:9px">${r.ctx}</span>
+      <div class="cbar" style="flex:1;max-width:60px"><div class="cfill ${r.c>=0.8?'cf-high':'cf-mid'}" style="width:${r.c*100}%"></div></div>
+      <span style="font-size:10px;min-width:28px">${r.c.toFixed(2)}</span>
+      ${r.st==='pending'?`
+        <button class="btn btn-ok btn-sm" onclick="docRel(${i},'approved')">✓</button>
+        <button class="btn btn-no btn-sm" onclick="docRel(${i},'rejected')">✗</button>
+        <button class="btn btn-sm" style="font-size:10px" onclick="toast('修改功能开发中')">✎</button>`
+      :r.st==='approved'?`<span class="badge b-green">已通过</span>`:`<span class="badge b-red">已拒绝</span>`}
+    </div>`).join('');
+}
+function docRel(i,st){
+  docRelData[i].st=st;buildDocRels();
+  toast(st==='approved'?'已确认写入图谱':'已拒绝',st==='approved'?'#3B6D11':'#A32D2D');
+}
+function batchApprove(){docRelData.filter(r=>r.st==='pending').forEach(r=>r.st='approved');buildDocRels();toast('批量审核通过','#3B6D11');}
+function commitDocs(){toast('已提交已审核关系至 RelOS 企业知识层','#3B6D11');}
+function simDocUpload(){
+  const names=['维修记录_Q1.xlsx','工艺规程_铸造.pdf','质量报告_2025.docx'];
+  toast('已上传：'+names[Math.floor(Math.random()*names.length)]);
+}
+
+// ─ KB Status ─
+function buildRelTypeDist(){
+  document.getElementById('rel-type-dist').innerHTML=relTypeDist.map((r,i)=>`
+    <tr>
+      <td><span class="badge b-blue">${r[0]}</span></td>
+      <td style="font-weight:500">${r[1]}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:5px">
+          <div class="cbar" style="width:60px"><div class="cfill cf-high" style="width:${parseFloat(r[2])*100}%"></div></div>
+          <span style="font-size:11px">${r[2]}</span>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+function buildLayerHealth(){
+  const layers=[
+    {name:'层 1 · 公开知识',count:'820条',cov:'18%',age:'平均 45 天',color:'var(--blue)',status:'健康'},
+    {name:'层 2 · 专家知识',count:'1,450条',cov:'32%',age:'平均 12 天',color:'var(--purple)',status:'需补充'},
+    {name:'层 3 · 企业文档',count:'2,340条',cov:'50%',age:'平均 7 天',color:'var(--teal)',status:'健康'},
+  ];
+  document.getElementById('layer-health').innerHTML=layers.map(l=>`
+    <div class="stat" style="border-left:3px solid ${l.color}">
+      <div style="font-size:11px;font-weight:500;color:${l.color};margin-bottom:6px">${l.name}</div>
+      <div style="font-size:19px;font-weight:500;margin-bottom:3px">${l.count}</div>
+      <div class="muted" style="font-size:10px">覆盖率：${l.cov}</div>
+      <div class="muted" style="font-size:10px">知识新鲜度：${l.age}</div>
+      <div style="margin-top:6px"><span class="badge ${l.status==='健康'?'b-green':'b-amber'}">${l.status}</span></div>
+    </div>`).join('');
+}
+
+init();
+</script>
+</body>
+</html>

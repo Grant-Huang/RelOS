@@ -24,6 +24,8 @@ class RelationObject(BaseModel):
 
     # 置信度
     confidence: float                # 0.0–1.0
+    phase_weight: float              # 阶段权重（0.0–1.0）
+    knowledge_phase: KnowledgePhase  # 知识阶段枚举
 
     # 来源与溯源
     provenance: SourceType           # 来源类型枚举
@@ -72,6 +74,56 @@ class RelationObject(BaseModel):
 | `expert_document` | 0.50–0.85 | 0.25 | 90 天 |
 
 > **Sprint 3 新增**：`structured_document`（FMEA/CMMS 工单规则解析）和 `expert_document`（8D 报告/交接班日志，LLM 抽取 + 人工标注）来源类型由文档摄取 Pipeline 自动设置，无需手动指定。
+
+### 1.2b 阶段权重（phase_weight）规则
+
+为保证多渠道知识在同一图谱中可解释、可治理，RelationObject 新增阶段字段：
+
+| knowledge_phase | 阶段说明 | phase_weight（建议初始值） |
+|----------------|---------|---------------------------|
+| `bootstrap` | 阶段 1：公共知识初始化 | 0.35 |
+| `interview` | 阶段 2：专家访谈调研 | 0.90 |
+| `pretrain` | 阶段 3：企业文档预训练 | 0.70 |
+| `runtime` | 阶段 4：运行期在线强化 | 1.00 |
+
+说明：
+- `phase_weight` 是**可配置默认值**，允许按行业/工厂微调。
+- 阶段 2、3 支持多轮强化；每次强化属于新的观测事件，不覆盖历史溯源。
+- 运行期（阶段 4）产生的确认/否定反馈应写入关系更新日志，并可提升 `knowledge_phase` 到 `runtime`。
+
+### 1.2c 最终置信度计算建议
+
+写入图谱的 `confidence` 为最终可用置信度，建议由以下因素共同作用：
+
+```text
+confidence_final = clamp(
+  confidence_observed
+  * phase_weight
+  * freshness_decay(t)
+  * source_adjustment(alpha),
+  0.0, 1.0
+)
+```
+
+其中：
+- `confidence_observed`：该次观测的原始置信度（输入或抽取结果）
+- `phase_weight`：阶段权重（本文新增）
+- `freshness_decay(t)`：基于 `half_life_days` 的时间衰减因子
+- `source_adjustment(alpha)`：按来源类型设置的合并/可信度调节因子
+
+实现建议：
+- 关系对象中持久化 `confidence`（最终值）和 `phase_weight`（解释因子）
+- 计算过程写入 `properties.confidence_trace`，便于审计与回放
+
+### 1.2d properties 持久化约定（实现对齐，新增）
+
+Neo4j 的关系属性不支持直接存储嵌套 Map/Dict（只能存原子类型或其数组），因此：
+
+- API / Python 模型层仍使用 `properties: dict[str, Any]`
+- Neo4j 存储层将其序列化为 `properties_json: string`（JSON 字符串）
+- 读取时再反序列化回 `properties`
+
+该约定用于支持阶段 4 的“无感标注上下文”、解释性追踪（如 `properties.confidence_trace`）等扩展字段，同时保持图存储兼容性。
 
 ### 1.3 关系状态流转
 
@@ -237,7 +289,8 @@ class ActionLog(BaseModel):
 
 ### 5.1 Schema 版本管理
 
-- RelationObject v1.0：当前版本（Sprint 1–2）
+- RelationObject v1.0：基础版本（Sprint 1–2）
+- RelationObject v1.1：新增 `knowledge_phase`、`phase_weight`（阶段化知识治理）
 - 新增字段策略：Pydantic `Optional` 字段 + 默认值，向后兼容
 - 破坏性变更：需要数据迁移脚本 + 版本号升级
 
@@ -246,3 +299,13 @@ class ActionLog(BaseModel):
 - 关系数据只追加，不修改历史记录
 - schema 变更通过 Neo4j SET 语句逐步迁移
 - 迁移脚本放 `scripts/migrations/` 目录，以日期命名
+
+### 5.3 v1.1 迁移步骤（新增）
+
+1. 给历史关系补全默认阶段字段（建议先按来源推断）：
+   - `manual_engineer` → `interview`
+   - `structured_document` / `expert_document` → `pretrain`
+   - `sensor_realtime` / `inference` → `runtime`
+   - 其他未知来源 → `bootstrap`
+2. 依据阶段设置默认 `phase_weight`。
+3. 保留旧关系 `confidence` 不回写重算，后续在新增观测中逐步自然校准。

@@ -23,6 +23,7 @@ import os
 import uuid
 
 import pytest
+import pytest_asyncio
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_AVAILABLE = False
@@ -54,15 +55,15 @@ requires_neo4j = pytest.mark.skipif(
 
 # ─── Fixtures ─────────────────────────────────────────────────────────
 
-@pytest.fixture(scope="module")
-def neo4j_driver_decisions():
+@pytest_asyncio.fixture(scope="function")
+async def neo4j_driver_decisions():
     from neo4j import AsyncGraphDatabase
     driver = AsyncGraphDatabase.driver(
         NEO4J_URI,
         auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "relos_dev")),
     )
     yield driver
-    asyncio.get_event_loop().run_until_complete(driver.close())
+    await driver.close()
 
 
 @pytest.fixture

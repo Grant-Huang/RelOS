@@ -19,6 +19,7 @@ import structlog
 from relos.core.models import (
     ALPHA_CONFIG,
     HALF_LIFE_CONFIG,
+    KnowledgePhase,
     MergeResult,
     RelationObject,
     RelationStatus,
@@ -171,6 +172,15 @@ class RelationEngine:
                 "status": new_status,
                 "updated_at": datetime.now(UTC),
                 "extracted_by": f"human:{engineer_id}",
+                # 人工反馈属于运行期强化（阶段 4），用于可解释性与治理
+                "knowledge_phase": KnowledgePhase.RUNTIME,
+                "phase_weight": 1.00,
+                # 反馈上下文尽量写入 properties，便于后续解释/审计
+                "properties": {
+                    **relation.properties,
+                    "last_feedback_type": feedback_type,
+                    "last_feedback_engineer_id": engineer_id,
+                },
             }
         )
 

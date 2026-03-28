@@ -13,9 +13,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+import uuid
+import json
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from relos.action.engine import ActionEngine, ActionRecord
@@ -31,6 +34,28 @@ logger = structlog.get_logger(__name__)
 _action_engine = ActionEngine()
 # 内存缓存：加速同请求内查询；持久化层为 Neo4j（解决重启丢失问题）
 _action_cache: dict[str, ActionRecord] = {}
+
+# 阶段4真流式：短期会话缓存（MVP 先内存，后续可迁移到 Redis）
+_stream_session_cache: dict[str, dict[str, Any]] = {}
+_STREAM_SESSION_TTL_SECONDS = 15 * 60  # 15分钟
+
+
+def _sse_event(event: str, data: dict[str, Any]) -> str:
+    payload = json.dumps(data, ensure_ascii=True)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+def _prune_stream_sessions(now: datetime) -> None:
+    expired: list[str] = []
+    for trace_id, item in _stream_session_cache.items():
+        created_at = item.get("created_at")
+        if not isinstance(created_at, datetime):
+            expired.append(trace_id)
+            continue
+        if (now - created_at).total_seconds() > _STREAM_SESSION_TTL_SECONDS:
+            expired.append(trace_id)
+    for trace_id in expired:
+        _stream_session_cache.pop(trace_id, None)
 
 
 class AlarmEvent(BaseModel):
@@ -55,6 +80,25 @@ class RootCauseRecommendation(BaseModel):
     shadow_mode: bool
     context_relations_count: int = 0
     processing_time_ms: float = 0.0
+
+    # ── 自解释协议（分层解释）────────────────────────────────────
+    # 兼容旧前端：新增字段为必填（有默认）也不会影响旧字段读取。
+    explanation_summary: str = ""
+    evidence_relations: list[dict[str, Any]] = []
+    phase_contributions: list[dict[str, Any]] = []
+    confidence_trace_id: str = ""
+
+
+class StreamAnswerRequest(BaseModel):
+    confidence_trace_id: str
+    question_id: str
+    answer: str
+
+
+class ApiResponse(BaseModel):
+    status: str
+    data: dict[str, Any] = {}
+    message: str = ""
 
 
 class ExecuteActionRequest(BaseModel):
@@ -107,7 +151,8 @@ async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecomme
     workflow = get_decision_workflow()
     final_state: DecisionState = await workflow.ainvoke(initial_state)
 
-    elapsed_ms = (datetime.utcnow() - t_start).total_seconds() * 1000
+    # 注意：t_start 使用的是带时区的 UTC 时间，elapsed 计算必须保持同一时区语义
+    elapsed_ms = (datetime.now(UTC) - t_start).total_seconds() * 1000
 
     logger.info(
         "alarm_analyzed",
@@ -115,6 +160,61 @@ async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecomme
         engine_path=final_state.get("engine_path", "unknown"),
         confidence=final_state.get("confidence", 0.0),
         processing_time_ms=round(elapsed_ms, 1),
+    )
+
+    # ─── 分层解释协议生成（证据/阶段贡献）────────────────────────────
+    trace_id = f"conf-trace-{uuid.uuid4().hex}"
+
+    supporting_ids: list[str] = final_state.get("supporting_relation_ids", []) or []
+    relations_by_id = {r.id: r for r in relations}
+
+    # 如果规则引擎给出了 supporting_relation_ids，就优先使用；否则退化为选取子图中最高置信度证据
+    evidence: list[RelationObject] = [
+        relations_by_id[rid]
+        for rid in supporting_ids
+        if rid in relations_by_id
+    ]
+    if not evidence:
+        evidence = sorted(relations, key=lambda r: r.confidence, reverse=True)[:3]
+
+    evidence_payload: list[dict[str, Any]] = []
+    phase_score: dict[str, float] = {}
+    for r in evidence:
+        phase = str(getattr(r, "knowledge_phase", None) or "")
+        weight = float(getattr(r, "phase_weight", 0.0) or 0.0)
+        score = float(r.confidence) * weight
+        phase_score[phase] = phase_score.get(phase, 0.0) + score
+
+        evidence_payload.append(
+            {
+                "id": r.id,
+                "relation_type": r.relation_type,
+                "confidence": r.confidence,
+                "provenance": r.provenance.value,
+                "knowledge_phase": str(r.knowledge_phase),
+                "phase_weight": r.phase_weight,
+                "status": r.status.value,
+                "provenance_detail": r.provenance_detail,
+            }
+        )
+
+    total_score = sum(phase_score.values()) or 1.0
+    phase_contrib_payload: list[dict[str, Any]] = [
+        {
+            "knowledge_phase": phase,
+            "score": round(score, 6),
+            "share": round(score / total_score, 4),
+        }
+        for phase, score in sorted(phase_score.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    top_phase = phase_contrib_payload[0]["knowledge_phase"] if phase_contrib_payload else "unknown"
+    share_pct = int(round(phase_contrib_payload[0]["share"] * 100)) if phase_contrib_payload else 0
+
+    explanation_summary = (
+        f"推荐：{final_state.get('recommended_cause','')}；"
+        f"置信度 {final_state.get('confidence',0.0):.2f}；"
+        f"主要证据阶段：{top_phase}（约 {share_pct}%）"
     )
 
     return RootCauseRecommendation(
@@ -129,7 +229,115 @@ async def analyze_alarm(event: AlarmEvent, request: Request) -> RootCauseRecomme
         shadow_mode=settings.SHADOW_MODE,
         context_relations_count=len(relations),
         processing_time_ms=round(elapsed_ms, 1),
+
+        # 自解释协议字段
+        explanation_summary=explanation_summary,
+        evidence_relations=evidence_payload,
+        phase_contributions=phase_contrib_payload,
+        confidence_trace_id=trace_id,
     )
+
+
+@router.post("/analyze-alarm/stream")
+async def analyze_alarm_stream(event: AlarmEvent, request: Request) -> StreamingResponse:
+    """
+    阶段4真流式：SSE 端点。
+
+    事件序列：summary → evidence → contributions → question → done
+    """
+    _prune_stream_sessions(datetime.now(UTC))
+
+    async def gen() -> Any:
+        result = await analyze_alarm(event, request)
+
+        _stream_session_cache[result.confidence_trace_id] = {
+            "created_at": datetime.now(UTC),
+            "alarm_id": result.alarm_id,
+            "device_id": result.device_id,
+            "last_question_id": "q-001",
+        }
+
+        yield _sse_event(
+            "summary",
+            {
+                "confidence_trace_id": result.confidence_trace_id,
+                "recommended_cause": result.recommended_cause,
+                "confidence": result.confidence,
+                "engine_used": result.engine_used,
+                "requires_human_review": result.requires_human_review,
+                "shadow_mode": result.shadow_mode,
+                "explanation_summary": result.explanation_summary,
+            },
+        )
+
+        yield _sse_event(
+            "evidence",
+            {
+                "confidence_trace_id": result.confidence_trace_id,
+                "evidence_relations": result.evidence_relations,
+                "is_final": True,
+            },
+        )
+
+        yield _sse_event(
+            "contributions",
+            {
+                "confidence_trace_id": result.confidence_trace_id,
+                "phase_contributions": result.phase_contributions,
+            },
+        )
+
+        yield _sse_event(
+            "question",
+            {
+                "confidence_trace_id": result.confidence_trace_id,
+                "question": {
+                    "question_id": "q-001",
+                    "type": "single_choice",
+                    "prompt": "为提高准确率，需要确认一个信息：当前是否处于高温环境（>35°C）？",
+                    "options": [
+                        {"id": "opt-yes", "label": "是（>35°C）"},
+                        {"id": "opt-no", "label": "否（≤35°C）"},
+                        {"id": "opt-unknown", "label": "不确定"},
+                    ],
+                    "required": False,
+                },
+            },
+        )
+
+        yield _sse_event("done", {"confidence_trace_id": result.confidence_trace_id, "ok": True})
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@router.post("/stream-answer", response_model=ApiResponse)
+async def stream_answer(body: StreamAnswerRequest) -> ApiResponse:
+    """
+    阶段4真流式问答：接收用户对 SSE question 的回答。
+    MVP：只做短期缓存记录（为后续“根据回答重算/补充证据”预留接口）。
+    """
+    now = datetime.now(UTC)
+    _prune_stream_sessions(now)
+
+    session = _stream_session_cache.get(body.confidence_trace_id)
+    if not session:
+        return ApiResponse(
+            status="error",
+            data={"accepted": False},
+            message="confidence_trace_id 已过期或不存在，请重新发起分析",
+        )
+
+    if body.question_id != session.get("last_question_id"):
+        return ApiResponse(
+            status="error",
+            data={"accepted": False},
+            message="question_id 不匹配或已过期",
+        )
+
+    session["last_answer"] = {"question_id": body.question_id, "answer": body.answer}
+    session["answered_at"] = datetime.now(UTC)
+
+    return ApiResponse(status="success", data={"accepted": True}, message="")
 
 
 @router.post("/execute-action", response_model=ActionStatusResponse)

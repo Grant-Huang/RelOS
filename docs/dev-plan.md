@@ -15,6 +15,8 @@
 4. **接口优先**：模块间接口文档先于实现代码（`docs/api.md` 先更新）
 5. **Shadow Mode 保护**：Sprint 3 前 Shadow Mode 必须默认开启，不得跳过
 
+6. **可解释性与可测量性**：所有面向业务的推荐必须提供可追溯解释字段（证据关系 + 阶段贡献），且必须有对应埋点以验证易用性改进效果
+
 ---
 
 ## 2. 团队结构
@@ -118,6 +120,15 @@
 | LangSmith 追踪中间件（`relos/middleware/langsmith_tracing.py`）| AI 工程师 | ✅ |
 | `/v1/metrics` 端点（关系图谱统计）| 后端 | ✅ |
 | Pre-flight 步骤 5 Redis 去重检查（24h 防重复）| 后端 | ✅ |
+
+#### Week 12：易用性与解释性契约（新增）
+
+| 任务 | 负责人 | 完成状态 |
+|------|--------|----------|
+| 冻结解释协议：`explanation_summary` / `evidence_relations` / `phase_contributions` / `confidence_trace_id` | PM + 架构师 | ✅ |
+| 阶段化字段落库：`knowledge_phase` / `phase_weight`（服务端默认回填）| 后端 | ✅ |
+| 无感标注闭环：反馈事件自动标记 `runtime` / `phase_weight=1.00` | 后端 | ✅ |
+| 易用性埋点最小规范（见 `docs/test-plan.md §1.4`）| PM + 前端 | 🔄 |
 | `_find_existing()` 实现（关系合并语义修复）| 架构师 | ✅ |
 | `datetime.utcnow()` 废弃警告修复 | 全员 | ✅ |
 

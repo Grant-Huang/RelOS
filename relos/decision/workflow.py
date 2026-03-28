@@ -81,13 +81,16 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
     节点 1：提取子图，编译为 Prompt 上下文。
     计算子图平均置信度，决定后续走哪条路径。
     """
+    # force_hitl：API 层在 initial_state.engine_path 预置为 "hitl"
+    # 工作流必须尊重该强制路径，不能被后续分支覆盖。
+    forced_hitl = state.get("engine_path") == "hitl"
     relations = state["relations"]
 
     if not relations:
         return {
             "context_block": None,
             "avg_confidence": 0.0,
-            "engine_path": "none",
+            "engine_path": "hitl" if forced_hitl else "none",
         }
 
     # 编译子图为 Prompt block
@@ -120,7 +123,9 @@ def node_extract_context(state: DecisionState) -> dict[str, Any]:
     conflict_count = sum(1 for r in relations if r.conflict_with)
     conflict_force_hitl = conflict_count > 2
 
-    if critical_force_hitl or conflict_force_hitl:
+    if forced_hitl:
+        path: Literal["rule_engine", "llm", "hitl", "none"] = "hitl"
+    elif critical_force_hitl or conflict_force_hitl:
         path: Literal["rule_engine", "llm", "hitl", "none"] = "hitl"
     elif avg_conf >= settings.RULE_ENGINE_MIN_CONFIDENCE:
         path = "rule_engine"
@@ -344,6 +349,7 @@ def node_hitl(state: DecisionState) -> dict[str, Any]:
     reason_text = "；".join(reasons) if reasons else "系统判断置信度不足"
 
     return {
+        "engine_path": "hitl",
         "recommended_cause": "需人工诊断",
         "confidence": state["avg_confidence"],
         "reasoning": (
@@ -359,6 +365,7 @@ def node_hitl(state: DecisionState) -> dict[str, Any]:
 def node_no_data(state: DecisionState) -> dict[str, Any]:
     """节点 2d：无数据路径（新设备或图谱为空）。"""
     return {
+        "engine_path": "no_data",
         "recommended_cause": "无历史数据，需人工诊断并录入关系",
         "confidence": 0.0,
         "reasoning": (
