@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { ClipboardCheck, ChevronRight, Loader2 } from 'lucide-react'
 import { createInterviewSession, getInterviewNextCard, postTelemetryEvent, submitInterviewCard } from '../api/client'
 
-export default function Interview() {
+export default function Interview({ embedded = false }) {
   const [sessionId, setSessionId] = useState('')
   const [engineerId, setEngineerId] = useState('eng-1')
   const [loading, setLoading] = useState(false)
@@ -65,14 +65,16 @@ export default function Interview() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <ClipboardCheck className="w-6 h-6 text-yellow-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">访谈微卡片</h1>
-          <p className="text-gray-500 text-sm">阶段 2 · 微任务卡片（confirm / reject / unsure）</p>
+    <div className={embedded ? 'max-w-3xl mx-auto' : 'p-8 max-w-3xl mx-auto'}>
+      {!embedded && (
+        <div className="flex items-center gap-3 mb-8">
+          <ClipboardCheck className="w-6 h-6 text-yellow-400" />
+          <div>
+            <h1 className="text-2xl font-bold text-white">访谈微卡片</h1>
+            <p className="text-gray-500 text-sm">阶段 2 · 微任务卡片（confirm / reject / unsure）</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-surface rounded-xl border border-gray-700 p-6 mb-6">
         <p className="text-sm font-medium text-gray-400 mb-4">会话</p>

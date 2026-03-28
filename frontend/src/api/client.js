@@ -102,14 +102,32 @@ export const listRelations = (params = {}) => {
   return request('GET', `/relations/${qs ? '?' + qs : ''}`)
 }
 
+/** 待审核队列（后端路径：GET /relations/pending-review） */
+export const listPendingRelations = (limit = 50) =>
+  request('GET', `/relations/pending-review?limit=${limit}`)
+
 export const createRelation = (payload) =>
   request('POST', '/relations/', payload)
+
+/** 人工反馈：确认/否定关系（触发 Relation Core 更新） */
+export const submitRelationFeedback = (relationId, body) =>
+  request('POST', `/relations/${relationId}/feedback`, body)
 
 export const approveRelation = (relationId) =>
   request('POST', `/relations/${relationId}/approve`)
 
 export const rejectRelation = (relationId) =>
   request('POST', `/relations/${relationId}/reject`)
+
+export const listTelemetryEvents = (limit = 50) =>
+  request('GET', `/telemetry/events?limit=${limit}`)
+
+export const listDocuments = () => request('GET', '/documents/')
+
+export const annotateDocumentRelation = (docId, relId, body) =>
+  request('POST', `/documents/${docId}/annotate/${relId}`, body)
+
+export const commitDocument = (docId) => request('POST', `/documents/${docId}/commit`, {})
 
 // ── 场景接口 ──────────────────────────────────────────
 export const getRiskRadar = () => request('GET', '/scenarios/risk-radar')

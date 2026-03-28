@@ -48,7 +48,7 @@ function StepIndicator({ current }) {
   )
 }
 
-export default function ExpertInit() {
+export default function ExpertInit({ embedded = false }) {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
@@ -167,15 +167,16 @@ export default function ExpertInit() {
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      {/* 页头 */}
-      <div className="flex items-center gap-3 mb-8">
-        <UserCog className="w-6 h-6 text-purple-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">专家初始化向导</h1>
-          <p className="text-gray-500 text-sm">将现场经验沉淀为知识图谱</p>
+    <div className={embedded ? 'p-0 max-w-2xl mx-auto' : 'p-8 max-w-2xl mx-auto'}>
+      {!embedded && (
+        <div className="flex items-center gap-3 mb-8">
+          <UserCog className="w-6 h-6 text-purple-400" />
+          <div>
+            <h1 className="text-2xl font-bold text-white">专家初始化向导</h1>
+            <p className="text-gray-500 text-sm">将现场经验沉淀为知识图谱</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <StepIndicator current={step} />
 

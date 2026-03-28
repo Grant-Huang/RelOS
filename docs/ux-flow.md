@@ -304,6 +304,25 @@ RelOS 前端（AgentNexus 消费，或独立 Web App）
     └── MES 数据导入
 ```
 
+### 5.1 工作台双前端 IA（MVP React）
+
+与原型 [`relos_workbench_v2.html`](relos_workbench_v2.html) 对齐：**侧栏分组** = 用户前端·运行时 / 专家·管理员·知识训练 / 系统监控 / 分析与演示；根路径 `/` 重定向至 `/runtime/dashboard`。浅色与深色主题通过 `html.theme-light` / `html.theme-dark` 切换（`localStorage` 持久化）。
+
+| 分组 | 视图 | 路径 | 说明 |
+|------|------|------|------|
+| 运行时 | 仪表盘 | `/runtime/dashboard` | 今日有事、指标折叠、一键进入告警/提示区 |
+| 运行时 | 自动标注监控 | `/runtime/automation` | 埋点/规则说明；可接 `GET /v1/telemetry/events` |
+| 运行时 | 提示标注（HITL） | `/runtime/prompt` | 默认仅展示置信度 0.50–0.79；`POST /v1/relations/{id}/feedback` |
+| 知识训练 | 公开知识（层 1） | `/knowledge/public` | 粘贴 + 预标注占位；`knowledge_phase=bootstrap` |
+| 知识训练 | 专家知识（层 2） | `/knowledge/expert` | 访谈 + 结构化向导；`?tab=interview` / `?tab=wizard` |
+| 知识训练 | 企业文档（层 3） | `/knowledge/documents` | 文档列表、批审、`POST .../annotate/{rel_id}` + 提交图谱 |
+| 系统 | 知识库状态 | `/system/kb-status` | `GET /v1/metrics` + 文档摘要 |
+| 分析与演示 | 告警分析等 | `/alarm`、`/line-efficiency`、`/strategic-sim` | 保留原演示页 |
+
+**兼容性重定向**：`/hitl` → `/runtime/prompt`；`/interview` → `/knowledge/expert?tab=interview`；`/expert-init` → `/knowledge/expert?tab=wizard`；`/dashboard` → `/runtime/dashboard`。
+
+**三层权威性**：各知识训练页顶栏使用 `LayerAuthorityBar`（层编号、置信度上限、`knowledge_phase` 文案），与 [`architecture.md`](architecture.md) / 数据模型一致。
+
 ---
 
 ## 6. 无障碍与工业场景适配
