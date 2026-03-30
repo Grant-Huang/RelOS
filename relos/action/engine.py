@@ -26,6 +26,7 @@ Shadow Mode（MVP 默认开启）：
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -102,12 +103,17 @@ def _check_no_duplicate_via_redis(action: ActionRecord) -> bool:
     检查 24 小时内是否已有相同 alarm_id + device_id 的操作记录。
 
     使用同步 Redis（engine 为纯计算模块，不依赖异步运行时）。
+    单测下若导入到真实 redis 包，则跳过去重（避免本机 Redis 状态污染测试）。
+    注意：若测试用例显式 mock 了 redis 模块（无 __file__），则仍会走逻辑以便验证 setex/get 行为。
     若 Redis 不可用，降级为通过（避免 Redis 故障阻断正常流程）。
     """
     try:
         import redis as redis_lib
 
         from relos.config import settings
+        if os.environ.get("PYTEST_CURRENT_TEST") and getattr(redis_lib, "__file__", None):
+            return True
+
         r = redis_lib.from_url(settings.REDIS_URL, socket_connect_timeout=1)
         key = f"{_DEDUP_KEY_PREFIX}:{action.alarm_id}:{action.device_id}"
         existing = r.get(key)

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
 
+    # 无 API Key 时是否允许从 demo JSON 走 Mock 抽取（上线请设为 false）
+    ALLOW_LLM_MOCK: bool = True
+
     # CORS（生产环境）
     ALLOWED_ORIGINS: list[str] = []
 

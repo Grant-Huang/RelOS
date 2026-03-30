@@ -1,0 +1,164 @@
+{
+  "cmms_maintenance": [
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "轴承磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.82,
+      "evidence": "2026-01-15 工单：焊接机M3轴承温度异常，更换轴承后恢复正常",
+      "reasoning": "维修记录明确描述了设备与故障类型的对应关系"
+    },
+    {
+      "source_node_name": "轴承磨损",
+      "source_node_type": "FailureMode",
+      "target_node_name": "润滑不足",
+      "target_node_type": "FailureMode",
+      "relation_type": "FAILURE_MODE__CAUSED_BY__ROOT_CAUSE",
+      "confidence": 0.75,
+      "evidence": "原因分析：长期运行未按周期补充润滑脂，导致轴承干摩擦",
+      "reasoning": "根因分析栏明确指出润滑不足为直接原因"
+    },
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "李工",
+      "target_node_type": "Operator",
+      "relation_type": "MACHINE__OPERATED_BY__OPERATOR",
+      "confidence": 0.78,
+      "evidence": "处理人：李工（工号 OPS-001），于 18:30 完成维修确认",
+      "reasoning": "维修工单明确记录了负责该设备维修的操作员"
+    },
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "轴承（M3）",
+      "target_node_type": "Component",
+      "relation_type": "MACHINE__REQUIRES__COMPONENT",
+      "confidence": 0.88,
+      "evidence": "更换零件：6205 深沟球轴承 × 2，件号 BRG-6205",
+      "reasoning": "更换零件记录直接说明该设备的关键部件"
+    }
+  ],
+  "fmea": [
+    {
+      "source_node_name": "焊接工序",
+      "source_node_type": "Process",
+      "target_node_name": "焊缝气孔",
+      "target_node_type": "Defect",
+      "relation_type": "PROCESS__GENERATES__DEFECT",
+      "confidence": 0.8,
+      "evidence": "失效模式：焊缝气孔；严重度 S=8，发生度 O=5，RPN=240",
+      "reasoning": "FMEA 表格直接描述了工序与失效模式的对应关系"
+    },
+    {
+      "source_node_name": "焊缝气孔",
+      "source_node_type": "Defect",
+      "target_node_name": "保护气体不足",
+      "target_node_type": "FailureMode",
+      "relation_type": "DEFECT__CAUSED_BY__ROOT_CAUSE",
+      "confidence": 0.77,
+      "evidence": "潜在原因：CO₂保护气体流量不足（<15L/min），导致氧化气孔",
+      "reasoning": "FMEA潜在原因栏直接说明了气孔的成因"
+    },
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "焊接过热",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.72,
+      "evidence": "潜在失效模式：焊机过热停机；严重度 S=7，RPN=168",
+      "reasoning": "FMEA 明确列出该机器的过热失效模式"
+    }
+  ],
+  "supplier_delivery": [
+    {
+      "source_node_name": "华盛钢材",
+      "source_node_type": "Supplier",
+      "target_node_name": "Q235 钢板",
+      "target_node_type": "Material",
+      "relation_type": "SUPPLIER__CAUSES__DELIVERY_DELAY",
+      "confidence": 0.85,
+      "evidence": "华盛钢材 Q235钢板，应交2026-01-10，实交2026-01-14，延误4天",
+      "reasoning": "交期记录明确显示供应商存在延误，且为多次重复"
+    },
+    {
+      "source_node_name": "华盛钢材",
+      "source_node_type": "Supplier",
+      "target_node_name": "Q235 钢板",
+      "target_node_type": "Material",
+      "relation_type": "SUPPLIER__SUPPLIES__MATERIAL",
+      "confidence": 0.92,
+      "evidence": "采购单 PO-2026-001～005：华盛钢材供应 Q235 钢板，单价 ¥3200/吨",
+      "reasoning": "多条采购记录证实供需关系"
+    }
+  ],
+  "quality_8d": [
+    {
+      "source_node_name": "焊接工序",
+      "source_node_type": "Process",
+      "target_node_name": "尺寸超差",
+      "target_node_type": "Defect",
+      "relation_type": "PROCESS__GENERATES__DEFECT",
+      "confidence": 0.78,
+      "evidence": "D2问题描述：产品焊缝宽度超差 0.8mm，不良率 3.2%，批次 B-2026-012",
+      "reasoning": "8D报告D2节明确描述了缺陷发生的工序"
+    },
+    {
+      "source_node_name": "尺寸超差",
+      "source_node_type": "Defect",
+      "target_node_name": "夹具磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "DEFECT__CAUSED_BY__ROOT_CAUSE",
+      "confidence": 0.75,
+      "evidence": "D4根本原因：定位夹具磨损 0.6mm，导致工件偏移，焊缝超出公差",
+      "reasoning": "D4节通过5-why分析确认夹具磨损为根本原因"
+    },
+    {
+      "source_node_name": "尺寸超差",
+      "source_node_type": "Defect",
+      "target_node_name": "夹具更换程序",
+      "target_node_type": "Action",
+      "relation_type": "DEFECT__RESOLVED_BY__ACTION",
+      "confidence": 0.8,
+      "evidence": "D5纠正措施：立即更换所有超出磨损限度的定位夹具，建立月度点检制度",
+      "reasoning": "D5节明确描述了针对该缺陷的永久纠正措施"
+    }
+  ],
+  "shift_handover": [
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "焊接过热",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.68,
+      "evidence": "本班异常：M3焊机 22:15 触发过热报警，停机 35 分钟",
+      "reasoning": "交接班记录中描述了该设备在本班发生的异常"
+    },
+    {
+      "source_node_name": "焊接机 M3",
+      "source_node_type": "Machine",
+      "target_node_name": "李工",
+      "target_node_type": "Operator",
+      "relation_type": "MACHINE__OPERATED_BY__OPERATOR",
+      "confidence": 0.72,
+      "evidence": "处理人：夜班李工，手动降低焊接电流后恢复，遗留问题：建议白班安排PM",
+      "reasoning": "交接班记录指明了设备异常处理的负责人"
+    }
+  ],
+  "unknown": [
+    {
+      "source_node_name": "设备",
+      "source_node_type": "Machine",
+      "target_node_name": "故障",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.55,
+      "evidence": "文档中提到设备相关故障信息",
+      "reasoning": "未识别模板，抽取结果置信度较低，建议人工核实"
+    }
+  ]
+}

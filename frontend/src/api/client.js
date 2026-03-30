@@ -5,6 +5,20 @@
 
 const BASE_URL = '/v1'
 
+/** FastAPI 错误体：detail 可能为 string 或校验错误数组 */
+function formatFetchDetail(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  const d = payload.detail
+  if (typeof d === 'string') return d
+  if (Array.isArray(d)) {
+    return d
+      .map((x) => (x && typeof x === 'object' && x.msg ? x.msg : JSON.stringify(x)))
+      .join('; ')
+  }
+  if (d && typeof d === 'object') return JSON.stringify(d)
+  return null
+}
+
 function getSessionId() {
   const key = 'relos_session_id'
   let sid = localStorage.getItem(key)
@@ -25,7 +39,8 @@ async function request(method, path, body = null) {
   const res = await fetch(`${BASE_URL}${path}`, opts)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    const msg = formatFetchDetail(err) || err.detail || `HTTP ${res.status}`
+    throw new Error(msg)
   }
   return res.json()
 }
@@ -53,7 +68,8 @@ export async function analyzeAlarmStream(payload, onEvent) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    const msg = formatFetchDetail(err) || err.detail || `HTTP ${res.status}`
+    throw new Error(msg)
   }
 
   const reader = res.body?.getReader()

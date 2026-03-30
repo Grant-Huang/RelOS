@@ -27,10 +27,13 @@ from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import structlog
 
+from relos.config import settings
 from relos.ingestion.document.entity_resolver import EntityResolver
 from relos.ingestion.document.models import (
     ExtractedRelationDraft,
@@ -39,6 +42,18 @@ from relos.ingestion.document.models import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+class LlmExtractionUnavailableError(RuntimeError):
+    """
+    上线模式（ALLOW_LLM_MOCK=false）下无法完成抽取时抛出。
+    reason 会写入日志与 API 错误信息，勿包含密钥或隐私。
+    """
+
+    def __init__(self, reason: str, **log_fields: Any) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.log_fields = log_fields
 
 _resolver = EntityResolver()
 
@@ -90,142 +105,64 @@ _USER_PROMPT_TMPL = """\
 请提取其中的实体关系，输出 JSON 数组。
 """
 
-# ─── Mock 关系（无 API Key 时的 demo 数据）────────────────────────────
+# ─── Mock 关系：无 API Key / LLM 失败时从 relos/demo_data 加载 ─────────
 
-_MOCK_RELATIONS: dict[TemplateType, list[dict[str, Any]]] = {
-    TemplateType.CMMS_MAINTENANCE: [
-        {
-            "source_node_name": "焊接机 M3", "source_node_type": "Machine",
-            "target_node_name": "轴承磨损",  "target_node_type": "FailureMode",
-            "relation_type": "MACHINE__HAS__FAILURE_MODE",
-            "confidence": 0.82,
-            "evidence": "2026-01-15 工单：焊接机M3轴承温度异常，更换轴承后恢复正常",
-            "reasoning": "维修记录明确描述了设备与故障类型的对应关系",
-        },
-        {
-            "source_node_name": "轴承磨损", "source_node_type": "FailureMode",
-            "target_node_name": "润滑不足", "target_node_type": "FailureMode",
-            "relation_type": "FAILURE_MODE__CAUSED_BY__ROOT_CAUSE",
-            "confidence": 0.75,
-            "evidence": "原因分析：长期运行未按周期补充润滑脂，导致轴承干摩擦",
-            "reasoning": "根因分析栏明确指出润滑不足为直接原因",
-        },
-        {
-            "source_node_name": "焊接机 M3", "source_node_type": "Machine",
-            "target_node_name": "李工",      "target_node_type": "Operator",
-            "relation_type": "MACHINE__OPERATED_BY__OPERATOR",
-            "confidence": 0.78,
-            "evidence": "处理人：李工（工号 OPS-001），于 18:30 完成维修确认",
-            "reasoning": "维修工单明确记录了负责该设备维修的操作员",
-        },
-        {
-            "source_node_name": "焊接机 M3",    "source_node_type": "Machine",
-            "target_node_name": "轴承（M3）",   "target_node_type": "Component",
-            "relation_type": "MACHINE__REQUIRES__COMPONENT",
-            "confidence": 0.88,
-            "evidence": "更换零件：6205 深沟球轴承 × 2，件号 BRG-6205",
-            "reasoning": "更换零件记录直接说明该设备的关键部件",
-        },
-    ],
-    TemplateType.FMEA: [
-        {
-            "source_node_name": "焊接工序", "source_node_type": "Process",
-            "target_node_name": "焊缝气孔", "target_node_type": "Defect",
-            "relation_type": "PROCESS__GENERATES__DEFECT",
-            "confidence": 0.80,
-            "evidence": "失效模式：焊缝气孔；严重度 S=8，发生度 O=5，RPN=240",
-            "reasoning": "FMEA 表格直接描述了工序与失效模式的对应关系",
-        },
-        {
-            "source_node_name": "焊缝气孔",   "source_node_type": "Defect",
-            "target_node_name": "保护气体不足", "target_node_type": "FailureMode",
-            "relation_type": "DEFECT__CAUSED_BY__ROOT_CAUSE",
-            "confidence": 0.77,
-            "evidence": "潜在原因：CO₂保护气体流量不足（<15L/min），导致氧化气孔",
-            "reasoning": "FMEA潜在原因栏直接说明了气孔的成因",
-        },
-        {
-            "source_node_name": "焊接机 M3",   "source_node_type": "Machine",
-            "target_node_name": "焊接过热",     "target_node_type": "FailureMode",
-            "relation_type": "MACHINE__HAS__FAILURE_MODE",
-            "confidence": 0.72,
-            "evidence": "潜在失效模式：焊机过热停机；严重度 S=7，RPN=168",
-            "reasoning": "FMEA 明确列出该机器的过热失效模式",
-        },
-    ],
-    TemplateType.SUPPLIER_DELIVERY: [
-        {
-            "source_node_name": "华盛钢材",   "source_node_type": "Supplier",
-            "target_node_name": "Q235 钢板",  "target_node_type": "Material",
-            "relation_type": "SUPPLIER__CAUSES__DELIVERY_DELAY",
-            "confidence": 0.85,
-            "evidence": "华盛钢材 Q235钢板，应交2026-01-10，实交2026-01-14，延误4天",
-            "reasoning": "交期记录明确显示供应商存在延误，且为多次重复",
-        },
-        {
-            "source_node_name": "华盛钢材",  "source_node_type": "Supplier",
-            "target_node_name": "Q235 钢板", "target_node_type": "Material",
-            "relation_type": "SUPPLIER__SUPPLIES__MATERIAL",
-            "confidence": 0.92,
-            "evidence": "采购单 PO-2026-001～005：华盛钢材供应 Q235 钢板，单价 ¥3200/吨",
-            "reasoning": "多条采购记录证实供需关系",
-        },
-    ],
-    TemplateType.QUALITY_8D: [
-        {
-            "source_node_name": "焊接工序",   "source_node_type": "Process",
-            "target_node_name": "尺寸超差",   "target_node_type": "Defect",
-            "relation_type": "PROCESS__GENERATES__DEFECT",
-            "confidence": 0.78,
-            "evidence": "D2问题描述：产品焊缝宽度超差 0.8mm，不良率 3.2%，批次 B-2026-012",
-            "reasoning": "8D报告D2节明确描述了缺陷发生的工序",
-        },
-        {
-            "source_node_name": "尺寸超差",     "source_node_type": "Defect",
-            "target_node_name": "夹具磨损",     "target_node_type": "FailureMode",
-            "relation_type": "DEFECT__CAUSED_BY__ROOT_CAUSE",
-            "confidence": 0.75,
-            "evidence": "D4根本原因：定位夹具磨损 0.6mm，导致工件偏移，焊缝超出公差",
-            "reasoning": "D4节通过5-why分析确认夹具磨损为根本原因",
-        },
-        {
-            "source_node_name": "尺寸超差",       "source_node_type": "Defect",
-            "target_node_name": "夹具更换程序",   "target_node_type": "Action",
-            "relation_type": "DEFECT__RESOLVED_BY__ACTION",
-            "confidence": 0.80,
-            "evidence": "D5纠正措施：立即更换所有超出磨损限度的定位夹具，建立月度点检制度",
-            "reasoning": "D5节明确描述了针对该缺陷的永久纠正措施",
-        },
-    ],
-    TemplateType.SHIFT_HANDOVER: [
-        {
-            "source_node_name": "焊接机 M3",  "source_node_type": "Machine",
-            "target_node_name": "焊接过热",   "target_node_type": "FailureMode",
-            "relation_type": "MACHINE__HAS__FAILURE_MODE",
-            "confidence": 0.68,
-            "evidence": "本班异常：M3焊机 22:15 触发过热报警，停机 35 分钟",
-            "reasoning": "交接班记录中描述了该设备在本班发生的异常",
-        },
-        {
-            "source_node_name": "焊接机 M3", "source_node_type": "Machine",
-            "target_node_name": "李工",      "target_node_type": "Operator",
-            "relation_type": "MACHINE__OPERATED_BY__OPERATOR",
-            "confidence": 0.72,
-            "evidence": "处理人：夜班李工，手动降低焊接电流后恢复，遗留问题：建议白班安排PM",
-            "reasoning": "交接班记录指明了设备异常处理的负责人",
-        },
-    ],
-    TemplateType.UNKNOWN: [
-        {
-            "source_node_name": "设备", "source_node_type": "Machine",
-            "target_node_name": "故障", "target_node_type": "FailureMode",
-            "relation_type": "MACHINE__HAS__FAILURE_MODE",
-            "confidence": 0.55,
-            "evidence": "文档中提到设备相关故障信息",
-            "reasoning": "未识别模板，抽取结果置信度较低，建议人工核实",
-        },
-    ],
-}
+_LLM_MOCK_JSON = "llm_extract_mock_relations.json"
+
+# 文件缺失或条目为空时的最后降级（保证流水线不因缺文件而崩溃）
+_FALLBACK_UNKNOWN_RAW: list[dict[str, Any]] = [
+    {
+        "source_node_name": "设备",
+        "source_node_type": "Machine",
+        "target_node_name": "故障",
+        "target_node_type": "FailureMode",
+        "relation_type": "MACHINE__HAS__FAILURE_MODE",
+        "confidence": 0.55,
+        "evidence": "文档中提到设备相关故障信息",
+        "reasoning": "未识别模板或 mock 数据未加载，建议人工核实",
+    },
+]
+
+
+def _demo_data_dir() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "demo_data"
+
+
+@lru_cache(maxsize=1)
+def _load_mock_relations_json() -> dict[str, list[dict[str, Any]]]:
+    path = _demo_data_dir() / _LLM_MOCK_JSON
+    if not path.is_file():
+        logger.warning("llm_mock_json_missing", path=str(path))
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error("llm_mock_json_read_error", path=str(path), error=str(e))
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for k, v in raw.items():
+        if isinstance(v, list):
+            out[str(k)] = [x for x in v if isinstance(x, dict)]
+    return out
+
+
+def clear_llm_mock_relations_cache() -> None:
+    """测试或热重载 demo 文件时可调用，清空 JSON 缓存。"""
+    _load_mock_relations_json.cache_clear()
+
+
+def _mock_raw_for_template(template_type: TemplateType) -> list[dict[str, Any]]:
+    data = _load_mock_relations_json()
+    key = template_type.value
+    rows = data.get(key) or []
+    if rows:
+        return rows
+    unk = data.get(TemplateType.UNKNOWN.value) or []
+    if unk:
+        return unk
+    return list(_FALLBACK_UNKNOWN_RAW)
 
 
 def _build_content(doc: ParsedDocument) -> str:
@@ -253,21 +190,35 @@ async def extract_relations(doc: ParsedDocument) -> list[ExtractedRelationDraft]
 
     自动判断模式：
     - ANTHROPIC_API_KEY 存在 → 调用 Claude API
-    - 否则 → 返回 Mock 数据（演示用）
+    - 否则 → 若 ALLOW_LLM_MOCK=true，从 demo JSON 返回 Mock；若 false（上线）则报错并打日志
 
     所有候选关系均经过 EntityResolver 实体解析。
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = (settings.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY", "") or "").strip()
 
     if api_key:
         raw_relations = await _extract_via_llm(doc, api_key)
     else:
+        if not settings.ALLOW_LLM_MOCK:
+            logger.error(
+                "llm_extraction_blocked",
+                reason="no_api_key_mock_disabled",
+                env=settings.ENV,
+                allow_llm_mock=settings.ALLOW_LLM_MOCK,
+                template=str(doc.template_type.value),
+                hint="配置 ANTHROPIC_API_KEY，或开发环境将 ALLOW_LLM_MOCK=true",
+            )
+            raise LlmExtractionUnavailableError(
+                "未配置 ANTHROPIC_API_KEY，且已关闭演示抽取（ALLOW_LLM_MOCK=false），无法执行关系抽取。",
+                template=str(doc.template_type.value),
+            )
         logger.info(
             "llm_mock_mode",
             reason="ANTHROPIC_API_KEY not set",
             template=doc.template_type,
+            allow_llm_mock=settings.ALLOW_LLM_MOCK,
         )
-        raw_relations = _MOCK_RELATIONS.get(doc.template_type, _MOCK_RELATIONS[TemplateType.UNKNOWN])
+        raw_relations = _mock_raw_for_template(doc.template_type)
 
     return _build_drafts(raw_relations)
 
@@ -310,9 +261,23 @@ async def _extract_via_llm(
         return relations
 
     except Exception as e:
-        logger.error("llm_extraction_failed", error=str(e), template=doc.template_type)
-        # 降级到 Mock
-        return _MOCK_RELATIONS.get(doc.template_type, _MOCK_RELATIONS[TemplateType.UNKNOWN])
+        logger.error(
+            "llm_extraction_failed",
+            error=str(e),
+            template=doc.template_type,
+            allow_llm_mock=settings.ALLOW_LLM_MOCK,
+        )
+        if not settings.ALLOW_LLM_MOCK:
+            logger.error(
+                "llm_no_mock_fallback",
+                reason="allow_llm_mock_disabled",
+                template=str(doc.template_type.value),
+            )
+            raise LlmExtractionUnavailableError(
+                "LLM 调用失败且未启用 Mock 降级（ALLOW_LLM_MOCK=false），请检查模型服务与密钥配置。",
+                template=str(doc.template_type.value),
+            ) from e
+        return _mock_raw_for_template(doc.template_type)
 
 
 def _build_drafts(raw: list[dict[str, Any]]) -> list[ExtractedRelationDraft]:

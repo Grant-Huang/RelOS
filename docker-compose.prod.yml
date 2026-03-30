@@ -79,6 +79,8 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}"
+      # 上线关闭无 Key 时的 JSON Mock 抽取；必须配置 ANTHROPIC_API_KEY
+      ALLOW_LLM_MOCK: "${ALLOW_LLM_MOCK:-false}"
 
       # 决策引擎
       RULE_ENGINE_MIN_CONFIDENCE: "${RULE_ENGINE_MIN_CONFIDENCE:-0.75}"

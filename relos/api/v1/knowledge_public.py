@@ -10,12 +10,17 @@ import html
 import re
 from typing import Any
 
-from fastapi import APIRouter
+import structlog
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from relos.ingestion.document.llm_extractor import extract_relations_plain_text
+from relos.ingestion.document.llm_extractor import (
+    LlmExtractionUnavailableError,
+    extract_relations_plain_text,
+)
 
 router = APIRouter()
+logger = structlog.get_logger(__name__)
 
 
 class ApiResponse(BaseModel):
@@ -45,10 +50,18 @@ def _highlight_preview(text: str) -> str:
 
 @router.post("/extract", response_model=ApiResponse)
 async def extract_public_knowledge(body: PublicExtractRequest) -> ApiResponse:
-    drafts = await extract_relations_plain_text(
-        body.text.strip(),
-        source_filename=f"{body.source_label}.txt",
-    )
+    try:
+        drafts = await extract_relations_plain_text(
+            body.text.strip(),
+            source_filename=f"{body.source_label}.txt",
+        )
+    except LlmExtractionUnavailableError as e:
+        logger.error(
+            "public_knowledge_extract_unavailable",
+            reason=e.reason,
+            **e.log_fields,
+        )
+        raise HTTPException(status_code=503, detail=str(e.reason)) from e
     out = []
     for d in drafts:
         mid = d.relation_type.split("__")[1] if "__" in d.relation_type else d.relation_type[:16]
