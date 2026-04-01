@@ -1,7 +1,7 @@
 # RelOS 部署文档
 
-> 适用版本：Sprint 4+（含 Web 工作台说明）
-> 更新日期：2026-03-28
+> 适用版本：复合场景一期（含 Web 工作台说明）
+> 更新日期：2026-03-30
 
 ---
 
@@ -48,8 +48,18 @@ curl http://localhost:8000/v1/health
 
 # 5. 注入测试数据（可选）
 python scripts/seed_neo4j.py
+python scripts/seed_demo_scenarios.py
 python scripts/simulate_alarm.py
 ```
+
+如果需要演示两套复杂场景，还建议保留：
+
+```bash
+ALLOW_LLM_MOCK=true
+SHADOW_MODE=true
+```
+
+这样文档抽取、决策级 HITL 和 `ActionBundle` 都可在本地稳定演示，而不会触发真实外部执行。
 
 ### 服务端口
 
@@ -128,6 +138,7 @@ JWT_ENABLED=true
 SHADOW_MODE=false                    # 关闭 Shadow Mode 后才会真实执行操作
 ALLOWED_ORIGINS=https://your-domain.com
 RATE_LIMIT_ENABLED=true
+ALLOW_LLM_MOCK=false               # 生产建议关闭，避免走 demo mock
 ```
 
 **生成安全密钥**：
@@ -185,6 +196,22 @@ docker exec relos-neo4j neo4j-admin database dump neo4j \
 # 将备份文件同步到远程存储
 rsync -az /backup/ backup-server:/relos-backups/
 ```
+
+### 2.6 复合场景一期的生产建议
+
+若生产环境并不需要演示两套复杂场景，应同时检查：
+
+- 不执行 `scripts/seed_demo_scenarios.py`
+- 不保留 `relos/demo_data/composite_decision_packages.json`
+- `ALLOW_LLM_MOCK=false`
+
+若只是私有化演示环境而非真实生产，可保留：
+
+- 复杂场景 seed
+- `relos/demo_data/*`
+- `SHADOW_MODE=true`
+
+这样仍可演示 `DecisionPackage`、决策级 HITL 和 `ActionBundle`，但不会误触真实执行。
 
 ---
 
@@ -324,6 +351,7 @@ DEFAULT_FACTORY_ID=factory-default
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `SHADOW_MODE` | `true` | `true`=只记录日志不执行；**生产就绪后设为 `false`** |
+| `ALLOW_LLM_MOCK` | `true` | `true`=允许文档抽取与 demo 走 mock；**生产建议 `false`** |
 
 ### 4.5 安全（JWT / CORS / 限流）
 
@@ -376,6 +404,7 @@ DEFAULT_FACTORY_ID=factory-default
 
 业务安全
 [ ] SHADOW_MODE 已确认是否需要关闭（false = 真实执行操作）
+[ ] ALLOW_LLM_MOCK 已确认为 false（真实生产建议关闭 demo mock）
 [ ] JWT Token 有效期已评估（默认 24h，工业场景建议 8h）
 [ ] 确认 HITL_TRIGGER_CONFIDENCE 阈值符合当前场景安全要求
 
@@ -467,6 +496,12 @@ GET /v1/metrics
 }
 ```
 
+如果启用了复合场景一期，还建议补充业务监控：
+
+- `/v1/decisions/pending-review` 的积压量
+- `DecisionPackage.status = pending_review` 的数量
+- 复合场景接口 `/v1/scenarios/composite-disturbance/analyze` 的响应时间
+
 ### 7.3 建议告警规则
 
 | 指标 | 告警阈值 | 处理建议 |
@@ -511,6 +546,19 @@ curl https://api.anthropic.com/v1/messages \
 
 # 解法 2：调高 HITL 阈值减少 LLM 调用
 HITL_TRIGGER_CONFIDENCE=0.6   # 更多走 HITL 而非 LLM
+```
+
+### 8.2A 复合场景分析无结果
+
+```bash
+# 症状：POST /v1/scenarios/composite-disturbance/analyze 返回 404/空结果
+
+# 检查是否已注入复杂场景 seed
+python scripts/seed_neo4j.py
+python scripts/seed_demo_scenarios.py
+
+# 检查是否误清理了 demo_data 中的复合场景样例
+ls relos/demo_data
 ```
 
 ### 8.3 Neo4j 连接问题
@@ -583,3 +631,4 @@ curl -X POST "http://localhost:8000/v1/expert-init/upload-excel?dry_run=true" \
 | v0.2.0 | Sprint 2 | 决策工作流（LangGraph）、Action Engine（Shadow Mode）|
 | v0.3.0 | Sprint 3 | Excel 导入、专家初始化 API、LangSmith、Temporal 脚手架 |
 | v0.4.0 | Sprint 4 | JWT 认证、多租户隔离、API 限流、CI/CD、行业本体模板 |
+| v0.4.5 | 复合场景一期 | `CompositeDisturbanceEvent`、`DecisionPackage`、决策级 HITL、`ActionBundle`、复杂场景 seed/mock |

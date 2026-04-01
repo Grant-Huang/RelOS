@@ -3,6 +3,7 @@
 > **适合人群**：第一次部署 RelOS 的工程师 / 实施人员
 > **预计时间**：30 分钟内完成首次运行
 > **系统支持**：Windows 10/11、macOS 12+、Ubuntu 20.04/22.04
+> **覆盖能力**：单告警分析 + 复合场景一期（DecisionPackage / 决策级 HITL / ActionBundle）
 
 ---
 
@@ -176,6 +177,15 @@ ANTHROPIC_API_KEY=sk-ant-你的真实密钥
 > 3. 点击 "API Keys" → "Create Key"
 > 4. 复制生成的密钥
 
+如果你只做本地演示，也可以保留：
+
+```bash
+ALLOW_LLM_MOCK=true
+SHADOW_MODE=true
+```
+
+这样即使没有真实执行链路，也能稳定演示文档抽取和复合场景的 Shadow 动作包。
+
 **开发测试时，其他配置保持默认即可。**
 
 ---
@@ -235,14 +245,16 @@ pip3 install -e ".[dev]"
 python3 -m pip install -e ".[dev]"
 ```
 
-注入 MVP 演示数据：
+注入 MVP 与复合场景演示数据：
 
 ```bash
 # Windows
 python scripts/seed_neo4j.py
+python scripts/seed_demo_scenarios.py
 
 # macOS / Linux（若提示 command not found: python，请用 python3）
 python3 scripts/seed_neo4j.py
+python3 scripts/seed_demo_scenarios.py
 ```
 
 成功后会看到：
@@ -268,6 +280,12 @@ python3 scripts/seed_neo4j.py
    ✓ [1.00] component-bearing-M1 --COMPONENT__PART_OF__DEVICE--> device-M1
 
 ✅ 种子数据注入完成！
+```
+
+如果你要演示两套复杂场景，还应看到 `seed_demo_scenarios.py` 的输出中包含：
+
+```text
+复杂场景 → POST /v1/scenarios/composite-disturbance/analyze
 ```
 
 ---
@@ -314,6 +332,65 @@ python3 scripts/simulate_alarm.py
 
 ---
 
+## 第六步 A：运行复合场景演示（推荐）
+
+在完成 `seed_neo4j.py` 和 `seed_demo_scenarios.py` 后，可以直接调用复合场景一期接口：
+
+```bash
+curl -X POST http://localhost:8000/v1/scenarios/composite-disturbance/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "incident_id": "incident-semicon-001",
+    "factory_id": "fab-01",
+    "scenario_type": "semiconductor_packaging",
+    "priority": "high",
+    "goal": "保障插单交付并控制设备与物料风险",
+    "time_window_start": "2026-03-30T13:47:00+08:00",
+    "time_window_end": "2026-03-30T13:51:00+08:00",
+    "events": [
+      {
+        "event_id": "evt-001",
+        "event_type": "rush_order",
+        "source_system": "ERP",
+        "occurred_at": "2026-03-30T13:47:00+08:00",
+        "entity_id": "order-BGA-rush-500",
+        "entity_type": "CustomerOrder",
+        "severity": "high",
+        "summary": "紧急插单 500 件 BGA",
+        "payload": {}
+      },
+      {
+        "event_id": "evt-002",
+        "event_type": "machine_anomaly",
+        "source_system": "MES",
+        "occurred_at": "2026-03-30T13:48:00+08:00",
+        "entity_id": "machine-SMT-02",
+        "entity_type": "Machine",
+        "severity": "high",
+        "summary": "SMT-02 贴装偏移接近工艺上限 80%",
+        "payload": {}
+      }
+    ]
+  }'
+```
+
+成功后会返回：
+
+- `DecisionPackage`
+- `candidate_plans`
+- `recommended_actions`
+- `requires_human_review`
+- `status=pending_review`
+
+接着可验证决策级 HITL：
+
+```bash
+curl http://localhost:8000/v1/decisions/pending-review
+curl http://localhost:8000/v1/decisions/decision-incident-semicon-001/actions
+```
+
+---
+
 ## 验证成功标志
 
 完成以上步骤后，你应该能访问：
@@ -325,6 +402,7 @@ python3 scripts/simulate_alarm.py
 | http://localhost:3000 | Web 知识工作台（需执行下方「可选」步骤） | RelOS 运行时/知识训练界面 |
 | http://localhost:7474 | Neo4j 图数据库界面 | Neo4j Browser（**不是**业务首页，见 Q8） |
 | http://localhost:8000/v1/metrics | 图谱统计数据 | 节点和关系数量 |
+| http://localhost:8000/v1/scenarios/composite-disturbance | 复合场景待审摘要 | 能列出已分析的复杂场景 |
 
 > Neo4j Browser 登录：用户名 `neo4j`，密码 `relos_dev`（若在 `.env` 中设置了 `NEO4J_PASSWORD`，则使用该密码）
 
@@ -343,6 +421,13 @@ npm run dev
 ```
 
 终端会打印本地访问地址（一般为 **http://localhost:3000**）。根路径会自动进入 **运行时仪表盘**；侧栏可切换到「知识训练」「系统监控」等分组。
+
+若你已注入复合场景 seed，还可以配合以下页面讲述复杂场景：
+
+- `AlarmAnalysis`
+- `LineEfficiency`
+- `StrategicSim`
+- `PromptLabeling`
 
 ---
 
@@ -416,6 +501,14 @@ docker compose logs neo4j --tail=20
 docker compose restart api
 ```
 
+如果你当前只是演示环境，也可以确认：
+
+```bash
+ALLOW_LLM_MOCK=true
+```
+
+这样文档摄取和样例关系抽取会走 demo mock。
+
 ---
 
 ### Q6：macOS Apple Silicon（M1/M2/M3）运行问题
@@ -455,6 +548,25 @@ taskkill /PID <PID> /F
 - **Neo4j** 始终在后台为 API 提供图存储；只有排错或看图谱时才需要打开 7474。
 
 更多说明见 [用户操作手册 §1.1](user-manual.md)。
+
+---
+
+### Q9：复合场景接口返回 404 或空列表
+
+**常见原因**：
+
+1. 没有执行 `scripts/seed_demo_scenarios.py`
+2. 当前尚未调用 `POST /v1/scenarios/composite-disturbance/analyze`
+3. Neo4j 中没有导入复杂场景节点和关系
+
+**解决**：
+
+```bash
+python3 scripts/seed_neo4j.py
+python3 scripts/seed_demo_scenarios.py
+```
+
+然后重新调用复合场景分析接口。
 
 ---
 
