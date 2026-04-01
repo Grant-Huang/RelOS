@@ -1,13 +1,13 @@
 # RelOS API 接口规范
 
-**版本**：v1.0  
+**版本**：v1.1  
 **Base URL**：`http://localhost:8000/v1`  
 **格式**：JSON  
 **认证**：MVP 阶段无认证；Sprint 4 实现 JWT Bearer Token
 
 ---
 
-**Sprint 3 新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景）、`/v1/documents`（文档摄取 + AI 标注）
+**近期新增端点**：`/v1/expert-init`（专家初始化）、`/v1/metrics`（图谱统计）、`/v1/scenarios`（演示场景 + 复合扰动分析）、`/v1/documents`（文档摄取 + AI 标注）、`/v1/decisions/pending-review`（决策级 HITL）
 
 ## 目录
 
@@ -354,6 +354,80 @@ data: {"confidence_trace_id":"conf-trace-...","ok":true}
 **响应** `200 OK`：ActionStatusResponse（同上格式）。
 
 **错误** `404 Not Found`：Action 不存在。
+
+---
+
+### GET /decisions/pending-review
+
+获取**决策级** HITL 队列，与 `GET /relations/pending-review` 的“关系审核队列”分离。
+
+**响应** `200 OK`：
+
+```json
+[
+  {
+    "decision_id": "decision-incident-semicon-001",
+    "incident_id": "incident-semicon-001",
+    "title": "半导体封装复合扰动决策包",
+    "risk_level": "high",
+    "recommended_plan_id": "plan-balance-repair-and-expedite",
+    "requires_human_review": true,
+    "review_reason": "存在设备异常/质量或物料约束，需要主管确认推荐方案与动作边界",
+    "status": "pending_review"
+  }
+]
+```
+
+---
+
+### POST /decisions/{decision_id}/review
+
+提交决策级审核结果。
+
+**请求体**：
+
+```json
+{
+  "reviewed_by": "supervisor-li",
+  "selected_plan_id": "plan-balance-repair-and-expedite",
+  "approved_actions": ["act-maint-smt02-feeder", "act-allocate-0402"],
+  "rejected_actions": [],
+  "review_comment": "允许先维修再并行排产",
+  "approve": true
+}
+```
+
+**响应**：返回更新后的 `DecisionPackage`。
+
+---
+
+### GET /decisions/{decision_id}/actions
+
+查询某个决策包对应的 `ActionBundle`。
+
+**响应** `200 OK`：
+
+```json
+{
+  "bundle_id": "bundle-decision-incident-semicon-001",
+  "decision_id": "decision-incident-semicon-001",
+  "status": "shadow_planned",
+  "actions": [
+    {
+      "action_id": "act-maint-smt02-feeder",
+      "action_type": "maintenance_work_order",
+      "target_system": "MRO",
+      "target_entity": "SMT-02",
+      "summary": "创建 SMT-02 送料器预防性更换工单",
+      "risk_level": "high",
+      "requires_human_review": true,
+      "payload_preview": {"machine_id": "SMT-02"}
+    }
+  ],
+  "shadow_mode": true,
+  "execution_notes": "Shadow Mode 已开启：动作包仅用于演示和审计，不直接触发 MES/MRO 写入。"
+}
+```
 
 ---
 
@@ -763,6 +837,85 @@ data: {"confidence_trace_id":"conf-trace-...","ok":true}
 
 ---
 
+### POST /scenarios/composite-disturbance/analyze
+
+**复合场景一期核心端点**：输入 `CompositeDisturbanceEvent`，返回 `DecisionPackage`。
+
+**请求体**：
+
+```json
+{
+  "incident_id": "incident-semicon-001",
+  "factory_id": "fab-01",
+  "scenario_type": "semiconductor_packaging",
+  "priority": "high",
+  "goal": "保障插单交付并控制设备与物料风险",
+  "time_window_start": "2026-03-30T13:47:00+08:00",
+  "time_window_end": "2026-03-30T13:51:00+08:00",
+  "events": [
+    {
+      "event_id": "evt-001",
+      "event_type": "rush_order",
+      "source_system": "ERP",
+      "occurred_at": "2026-03-30T13:47:00+08:00",
+      "entity_id": "order-BGA-rush-500",
+      "entity_type": "CustomerOrder",
+      "severity": "high",
+      "summary": "紧急插单 500 件 BGA",
+      "payload": {}
+    }
+  ]
+}
+```
+
+**响应** `200 OK`：
+
+```json
+{
+  "decision_id": "decision-incident-semicon-001",
+  "incident_id": "incident-semicon-001",
+  "title": "半导体封装复合扰动决策包",
+  "incident_summary": "保障插单交付并控制设备与物料风险。关键扰动：紧急插单 500 件 BGA",
+  "risk_level": "high",
+  "recommended_plan_id": "plan-balance-repair-and-expedite",
+  "candidate_plans": [
+    {
+      "plan_id": "plan-balance-repair-and-expedite",
+      "name": "先预防维修再并行插单保交付",
+      "summary": "14:15 前处理 SMT-02 送料器风险，随后由 SMT-02 与 SMT-04 共同承接插单。",
+      "assumptions": ["备料能在 15:00 前到位"],
+      "risk_level": "high",
+      "estimated_delivery_impact": "当班内仍有机会完成 18:00 插单目标",
+      "estimated_quality_impact": "降低贴装偏移继续扩大的质量风险",
+      "estimated_capacity_impact": "短时停机换取稳定产能"
+    }
+  ],
+  "recommended_actions": [],
+  "evidence_relations": [],
+  "requires_human_review": true,
+  "review_reason": "存在设备异常/质量或物料约束，需要主管确认推荐方案与动作边界",
+  "trace_id": "trace-...",
+  "status": "pending_review",
+  "context_block": "## 工厂关系上下文（RelOS）...",
+  "context_query_strategy": "composite_disturbance",
+  "context_relations_count": 6
+}
+```
+
+---
+
+### GET /scenarios/composite-disturbance/{incident_id}
+
+按 `incident_id` 查询单个复合场景分析结果。
+
+---
+
+### GET /scenarios/composite-disturbance
+
+列出当前处于待审状态的复合场景摘要。
+
+---
+
 ## 8. 文档摄取与 AI 标注（Sprint 3 扩展）
 
 > **工作流**：上传文档 → AI 分析（Claude）→ 人工标注（approve/reject/modify）→ 提交图谱
@@ -1076,6 +1229,18 @@ curl -X POST http://localhost:8000/v1/documents/$DOC_ID/commit
 | `completed` | 已完成 |
 | `failed` | 已失败 |
 | `rolled_back` | 已回滚 |
+
+### DecisionPackageStatus 枚举
+
+| 值 | 说明 |
+|----|------|
+| `draft` | 已生成但尚未进入审核 |
+| `pending_review` | 等待主管/工程师确认 |
+| `approved` | 方案已通过 |
+| `rejected` | 方案被驳回 |
+| `shadow_planned` | 动作包已生成，等待上层执行编排 |
+| `executed` | 外部系统已执行并回写 |
+| `rolled_back` | 已撤销或回退 |
 
 ---
 

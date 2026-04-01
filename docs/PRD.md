@@ -1,6 +1,6 @@
 # RelOS 产品需求文档（PRD）
 
-**版本**：v1.1（Sprint 3 Week 12 扩展版）
+**版本**：v1.2（复合场景一期）
 **日期**：2026 年 3 月
 **状态**：Sprint 1–3 已交付，Sprint 4 规划中
 **作者**：Nexus AI Platform 产品团队
@@ -193,6 +193,28 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 5. 规则引擎无匹配 + LLM confidence < 0.4
 6. 工程师手动触发（`force_hitl=true`）
 
+**FR-13A：复合扰动输入模型（一期新增）**
+- 系统必须支持 `CompositeDisturbanceEvent`
+- 一个复合扰动事件可包含订单插单、设备异常、质量下滑、物料短缺、刀具夹具约束等多个 `CompositeSubEvent`
+- 必须包含统一时间窗、优先级和业务目标
+
+**FR-13B：结构化决策包（一期新增）**
+- 对复合扰动场景，系统必须输出 `DecisionPackage`，而不是单一 `recommended_cause`
+- `DecisionPackage` 至少包含：
+  - `decision_id`
+  - `incident_id`
+  - `candidate_plans`
+  - `recommended_plan_id`
+  - `recommended_actions`
+  - `evidence_relations`
+  - `requires_human_review`
+  - `status`
+
+**FR-13C：决策级 HITL（一期新增）**
+- 系统必须支持决策级待审队列，与关系级 `pending_review` 分离
+- 人工审核对象应为方案和动作，而不是单条关系
+- 必须支持 `approved/rejected/shadow_planned` 等决策状态流转
+
 ### 4.5 执行管理（Action Engine）
 
 **FR-14：八状态执行状态机**
@@ -210,6 +232,12 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - MVP 默认开启：Pre-flight Check 照常执行，EXECUTING 阶段只记录日志
 - Shadow Mode 可通过配置 `SHADOW_MODE=false` 关闭（Sprint 3 后可用）
 
+**FR-16A：ActionBundle（一期新增）**
+- 复合场景下系统必须支持 `ActionBundle`
+- 一个 `ActionBundle` 绑定一个 `decision_id`
+- 动作列表至少包含 `action_type`、`target_system`、`target_entity`、`payload_preview`
+- 一期仅输出 Shadow 动作包，不直接执行外部系统写入
+
 ### 4.6 API 接口
 
 **FR-17：REST API**
@@ -222,12 +250,18 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - `POST /v1/decisions/analyze-alarm`：告警根因分析
 - `POST /v1/decisions/execute-action`：触发操作执行
 - `GET /v1/decisions/action/{id}`：查询操作状态
+- `GET /v1/decisions/pending-review`：获取决策级待审队列
+- `POST /v1/decisions/{decision_id}/review`：提交决策级审核结果
+- `GET /v1/decisions/{decision_id}/actions`：查询某个决策包的 `ActionBundle`
 - `GET /v1/scenarios/line-efficiency`：场景7 产线效率分析
 - `GET /v1/scenarios/cross-dept-analysis`：场景8 跨部门协同分析
 - `GET /v1/scenarios/issue-resolution`：场景9 异常处理效率分析
 - `GET /v1/scenarios/risk-radar`：场景10 企业级风险雷达
 - `GET /v1/scenarios/resource-optimization`：场景11 资源配置优化
 - `POST /v1/scenarios/strategic-simulation`：场景12 战略决策模拟
+- `POST /v1/scenarios/composite-disturbance/analyze`：复合扰动分析，返回 `DecisionPackage`
+- `GET /v1/scenarios/composite-disturbance/{incident_id}`：查询单个复合扰动结果
+- `GET /v1/scenarios/composite-disturbance`：列出复合扰动待审摘要
 - `POST /v1/expert-init/*`：专家访谈与关系补录接口（阶段 2）
 - `POST /v1/documents/import`：企业文档导入与预训练接口（阶段 3）
 
@@ -264,13 +298,20 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - ✅ 规则引擎 + LLM 融合决策
 - ✅ Human-in-the-Loop 工作队列
 - ✅ Action 执行状态机（Shadow Mode）
+- ✅ 复合扰动输入建模（`CompositeDisturbanceEvent`）
+- ✅ 结构化决策包（`DecisionPackage`）
+- ✅ 决策级 HITL 队列与审核
+- ✅ 复合动作包（`ActionBundle`）的 Shadow 输出
 - ✅ REST API
 
 ### 6.2 不在 RelOS 范围内（边界）
 
 - ❌ 自然语言对话界面（属于 AgentNexus L3）
+- ❌ 多 Agent Task DAG 编排（属于 AgentNexus L3）
+- ❌ `/decide` 式对话审批入口（属于 AgentNexus L3）
 - ❌ 直接控制设备（属于 Nexus Ops L1）
 - ❌ 数据采集与传感器管理（属于 Nexus Ops L1）
+- ❌ MES/WMS/MRO/ERP 真执行写回（应通过 MCP 化接口接入）
 - ❌ 用户界面（RelOS 是后端服务，UI 由上层消费）
 - ❌ 报表与 BI 仪表板（上层应用负责）
 
@@ -334,6 +375,33 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 ✓ 不影响现有 MES 系统运行
 ```
 
+### 7.4 Epic 4：复合扰动决策
+
+```
+作为 生产主管，
+当 插单、设备异常、物料或质量扰动在短时间内叠加发生时，
+我希望 RelOS 输出结构化决策包和可审计的候选动作，
+以便 我能在几分钟内判断应停机、改排程还是调拨资源，而不是分别问多个系统。
+
+验收标准：
+✓ 系统接受多子事件输入并生成一个 decision_id
+✓ 返回至少 2 个候选方案和对应风险等级
+✓ 中风险及以上方案进入决策级 HITL 队列
+✓ 审核通过后可查询同一 decision_id 的 ActionBundle
+```
+
+```
+作为 AgentNexus 或上层应用开发者，
+当 我接入 RelOS 的复合场景能力时，
+我希望 直接消费 ContextBlock、DecisionPackage 和 ActionBundle 契约，
+以便 我无需重复实现图谱推理，也能完成上层编排与展示。
+
+验收标准：
+✓ 契约字段稳定并有文档
+✓ context_block 为 Markdown，可直接注入上层 Agent
+✓ DecisionPackage 与 ActionBundle 可通过 REST API 查询
+```
+
 ---
 
 ## 8. 优先级矩阵
@@ -349,6 +417,9 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 | Excel 批量导入 | ★★★★ | 低 | P1 | Sprint 3 |
 | 专家初始化 UI | ★★★★ | 中 | P1 | Sprint 3 |
 | Temporal.io 工作流 | ★★★ | 高 | P2 | Sprint 3 |
+| 复合扰动决策包 | ★★★★★ | 中 | P1 | 复合场景一期 ✅ |
+| 决策级 HITL | ★★★★★ | 中 | P1 | 复合场景一期 ✅ |
+| ActionBundle Shadow 输出 | ★★★★ | 中 | P1 | 复合场景一期 ✅ |
 | 多租户支持 | ★★★ | 高 | P2 | Sprint 4 |
 | 行业本体模板 | ★★★★ | 中 | P2 | Sprint 4 |
 | 图谱可视化编辑器 | ★★★ | 高 | P3 | Sprint 5 |
@@ -369,6 +440,14 @@ Machine_M1 + HighTemp_Context --[INDICATES, confidence=0.30]--> CoolantInsuffici
 - 专家初始化 API（`/v1/expert-init`）
 - Temporal.io 工作流集成
 - LangSmith 调用追踪
+
+### v0.25（复合场景一期，已交付）
+- `CompositeDisturbanceEvent` / `CompositeSubEvent`
+- `DecisionPackage` / `CandidatePlan` / `DecisionAction`
+- 决策级 HITL 队列与审核接口
+- `ActionBundle` Shadow 输出
+- 半导体封装与汽车零部件两套复杂场景 seed/mock 数据
+- `RelOS -> AgentNexus` 对接契约文档
 
 ### v0.3（Sprint 4，计划中）
 - 多租户架构（工厂级隔离）

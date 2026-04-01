@@ -1,8 +1,8 @@
 # RelOS 系统使用操作手册
 
-> **版本**：v0.5.0（Sprint 4+）
+> **版本**：v0.6.0（复合场景一期）
 > **适用角色**：维修工程师、设备管理员、专家/知识管理员、IT 集成人员
-> **更新日期**：2026-03-28（补充 Web 知识工作台、部署入口说明）
+> **更新日期**：2026-03-30（补充复合扰动决策包、决策级 HITL 与复杂场景演示）
 
 ---
 
@@ -128,6 +128,26 @@ cd frontend && npm install && npm run dev
 ```
 
 浏览器访问终端提示的本地地址（一般为 `http://localhost:3000`）。详细步骤见 [quickstart.md](quickstart.md)。
+
+---
+
+### 2.5 复合扰动决策包（一期新增）
+
+当系统不再只面对“单条告警”，而是同时收到订单、设备、物料、质量等多个扰动时，RelOS 会把它们组织为一份**复合扰动决策包**。
+
+核心概念：
+
+| 概念 | 说明 |
+|------|------|
+| `CompositeDisturbanceEvent` | 一次复合扰动输入，包含多个子事件和统一时间窗 |
+| `DecisionPackage` | RelOS 输出的结构化决策包，包含候选方案、证据、风险等级 |
+| 决策级 HITL | 面向“是否停机、是否改排程、是否发起调拨”等中风险动作的人工确认 |
+| `ActionBundle` | 与 `decision_id` 绑定的一组 Shadow 动作建议，不直接真执行 |
+
+典型触发场景：
+
+- 紧急插单 + 设备异常 + 物料短缺
+- 插单 + 质量指标下降 + 核心设备振动预警
 
 ---
 
@@ -350,7 +370,62 @@ Shadow Mode 下：所有操作记录日志，不实际执行
 
 ---
 
-### 3.5 图谱统计
+### 3.5 复合扰动分析（一期新增）
+
+**功能**：把订单、设备、质量、物料等多个事件合并分析，输出 `DecisionPackage`。
+
+**接口**：`POST /v1/scenarios/composite-disturbance/analyze`
+
+**适合的业务问题**：
+
+- 某台核心设备出现异常时，是否还能承接插单
+- 订单保交付与质量扩散控制如何平衡
+- 物料、刀具、夹具或备件是否成为方案约束
+
+**请求体要点**：
+
+| 字段 | 说明 |
+|------|------|
+| `incident_id` | 本次复合事件唯一 ID |
+| `scenario_type` | 例如 `semiconductor_packaging` / `auto_parts_manufacturing` |
+| `goal` | 顶层目标描述 |
+| `events[]` | 订单插单、设备异常、物料短缺、质量下滑等子事件 |
+
+**输出字段要点**：
+
+| 字段 | 说明 |
+|------|------|
+| `decision_id` | 决策包 ID |
+| `candidate_plans` | 候选方案列表 |
+| `recommended_plan_id` | 推荐方案 |
+| `recommended_actions` | 推荐动作列表 |
+| `evidence_relations` | 关键证据关系 |
+| `requires_human_review` | 是否进入决策级 HITL |
+| `status` | `draft` / `pending_review` / `approved` 等 |
+
+**说明**：
+
+- 该接口属于 RelOS 的“结构化推理”能力，不等于多 Agent 编排器
+- 返回的是可审计的结构化决策结果，供前端工作台或 AgentNexus 继续消费
+
+#### 决策级 HITL 队列
+
+接口：
+
+- `GET /v1/decisions/pending-review`
+- `POST /v1/decisions/{decision_id}/review`
+
+这里审核的是**方案和动作**，不是单条关系。
+
+审核通过后，可继续读取：
+
+- `GET /v1/decisions/{decision_id}/actions`
+
+拿到对应的 `ActionBundle`。
+
+---
+
+### 3.6 图谱统计
 
 **功能**：查看知识库的整体健康状况
 
@@ -674,6 +749,125 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 
 ---
 
+## 场景七：半导体封装复合扰动决策
+
+**背景**：13:47 同时出现大客户 BGA 插单、`SMT-02` 贴装偏移预警、`0402` 电阻库存仅余 1.5 小时。
+
+**角色**：生产主管 / 设备工程师 / 物料协调员 / 工厂 IT
+
+### 操作步骤
+
+**步骤 1**：调用复合扰动分析接口
+
+```bash
+curl -X POST http://localhost:8000/v1/scenarios/composite-disturbance/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "incident_id": "incident-semicon-001",
+    "factory_id": "fab-01",
+    "scenario_type": "semiconductor_packaging",
+    "priority": "high",
+    "goal": "保障插单交付并控制设备与物料风险",
+    "time_window_start": "2026-03-30T13:47:00+08:00",
+    "time_window_end": "2026-03-30T13:51:00+08:00",
+    "events": [
+      {
+        "event_id": "evt-001",
+        "event_type": "rush_order",
+        "source_system": "ERP",
+        "occurred_at": "2026-03-30T13:47:00+08:00",
+        "entity_id": "order-BGA-rush-500",
+        "entity_type": "CustomerOrder",
+        "severity": "high",
+        "summary": "紧急插单 500 件 BGA",
+        "payload": {}
+      },
+      {
+        "event_id": "evt-002",
+        "event_type": "machine_anomaly",
+        "source_system": "MES",
+        "occurred_at": "2026-03-30T13:48:00+08:00",
+        "entity_id": "machine-SMT-02",
+        "entity_type": "Machine",
+        "severity": "high",
+        "summary": "SMT-02 贴装偏移接近工艺上限 80%",
+        "payload": {}
+      }
+    ]
+  }'
+```
+
+**步骤 2**：查看返回的 `DecisionPackage`
+
+重点关注：
+
+- `candidate_plans`
+- `recommended_plan_id`
+- `recommended_actions`
+- `requires_human_review`
+
+**步骤 3**：进入决策级 HITL 队列
+
+```bash
+curl http://localhost:8000/v1/decisions/pending-review
+```
+
+**步骤 4**：主管确认方案
+
+```bash
+curl -X POST http://localhost:8000/v1/decisions/decision-incident-semicon-001/review \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reviewed_by": "supervisor-li",
+    "selected_plan_id": "plan-balance-repair-and-expedite",
+    "approved_actions": ["act-maint-smt02-feeder", "act-allocate-0402"],
+    "rejected_actions": [],
+    "review_comment": "允许先维修再并行排产",
+    "approve": true
+  }'
+```
+
+**步骤 5**：查看 Shadow 动作包
+
+```bash
+curl http://localhost:8000/v1/decisions/decision-incident-semicon-001/actions
+```
+
+**结果**：
+
+- RelOS 输出一份结构化决策包
+- 维修、物料、排产动作都以 `ActionBundle` 形式可审计展示
+- 仍不直接写 MES/MRO/WMS，只做 Shadow
+
+---
+
+## 场景八：汽车零部件多扰动并发决策
+
+**背景**：08:17 客户 A 插单，08:23 `CNC-07` 振动预警，08:31 B 线连续 3 个批次 `CPK=1.1`。
+
+**角色**：生产主管 / 质量工程师 / 维护工程师
+
+### 操作步骤
+
+**步骤 1**：调用复合扰动分析接口，`scenario_type` 使用 `auto_parts_manufacturing`
+
+**步骤 2**：查看候选方案，判断是“保持 CNC-07 连续运行”还是“完成在制后停机并切换到 `CNC-09/CNC-12`”
+
+**步骤 3**：审核通过后查看 `ActionBundle`
+
+典型动作包括：
+
+- `CNC-07` 主轴轴承更换工单
+- 大客户订单切换到 `CNC-09/CNC-12`
+- `φ32` 铣刀与夹具调拨
+
+**演示重点**：
+
+- RelOS 展示统一上下文、证据关系、风险等级与方案建议
+- AgentNexus 或外部系统若未接入，也不影响 RelOS 单独完成演示
+
+---
+
 # 附录
 
 ## API 基础信息
@@ -700,8 +894,14 @@ curl -X POST "http://localhost:8000/v1/ontology/templates/automotive/import"
 | `/telemetry/events` | GET | 埋点/事件列表（自动标注监控等） |
 | `/documents/*` | 多种 | 企业文档上传、澄清、单条标注、提交图谱 |
 | `/decisions/analyze-alarm` | POST | 告警根因分析 |
+| `/scenarios/composite-disturbance/analyze` | POST | 复合扰动分析，返回 `DecisionPackage` |
+| `/scenarios/composite-disturbance/{incident_id}` | GET | 查询单个复合场景决策包 |
+| `/scenarios/composite-disturbance` | GET | 查询复合场景待审列表 |
 | `/decisions/execute-action` | POST | 执行操作任务 |
 | `/decisions/action/{id}` | GET | 查询操作状态 |
+| `/decisions/pending-review` | GET | 决策级 HITL 队列 |
+| `/decisions/{decision_id}/review` | POST | 审核决策包 |
+| `/decisions/{decision_id}/actions` | GET | 查询 `ActionBundle` |
 | `/expert-init` | POST | 专家单条录入 |
 | `/expert-init/batch` | POST | 专家批量录入 |
 | `/expert-init/upload-excel` | POST | Excel 文件导入 |
