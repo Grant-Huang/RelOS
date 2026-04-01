@@ -1,0 +1,130 @@
+{
+  "semiconductor_packaging": {
+    "incident_id": "incident-semicon-001",
+    "decision_id": "decision-incident-semicon-001",
+    "title": "半导体封装复合扰动决策包",
+    "risk_level": "high",
+    "recommended_plan_id": "plan-balance-repair-and-expedite",
+    "candidate_plans": [
+      {
+        "plan_id": "plan-balance-repair-and-expedite",
+        "name": "先预防维修再并行插单保交付",
+        "summary": "14:15 前处理 SMT-02 送料器风险，随后由 SMT-02 与 SMT-04 共同承接插单。",
+        "assumptions": [
+          "备料能在 15:00 前到位",
+          "SMT-04 可释放部分产能"
+        ],
+        "risk_level": "high",
+        "estimated_delivery_impact": "当班内仍有机会完成 18:00 插单目标",
+        "estimated_quality_impact": "降低贴装偏移持续扩大带来的批量风险",
+        "estimated_capacity_impact": "短时停机 25 分钟，换取后续稳定产能"
+      },
+      {
+        "plan_id": "plan-expedite-without-stop",
+        "name": "不停机强行保交付",
+        "summary": "保持 SMT-02 连续运行，同时压缩换线窗口抢交付。",
+        "assumptions": [
+          "设备可继续稳定运行",
+          "质量风险可接受"
+        ],
+        "risk_level": "high",
+        "estimated_delivery_impact": "短期产出最大",
+        "estimated_quality_impact": "返工与质量逸散风险高",
+        "estimated_capacity_impact": "名义产能最高但不稳定"
+      }
+    ],
+    "recommended_actions": [
+      {
+        "action_id": "act-maint-smt02-feeder",
+        "action_type": "maintenance_work_order",
+        "target_system": "MRO",
+        "target_entity": "SMT-02",
+        "summary": "创建 SMT-02 送料器预防性更换工单",
+        "risk_level": "high",
+        "requires_human_review": true,
+        "payload_preview": {
+          "machine_id": "SMT-02",
+          "component": "feeder_gear",
+          "window": "14:15-14:40"
+        }
+      },
+      {
+        "action_id": "act-allocate-0402",
+        "action_type": "material_transfer",
+        "target_system": "WMS",
+        "target_entity": "0402-resistor",
+        "summary": "发起 0402 电阻卷料紧急调拨",
+        "risk_level": "medium",
+        "requires_human_review": false,
+        "payload_preview": {
+          "material_id": "0402-resistor",
+          "required_eta": "15:00"
+        }
+      }
+    ]
+  },
+  "auto_parts_manufacturing": {
+    "incident_id": "incident-auto-001",
+    "decision_id": "decision-incident-auto-001",
+    "title": "汽车零部件复合扰动决策包",
+    "risk_level": "high",
+    "recommended_plan_id": "plan-shift-capacity-and-maintain",
+    "candidate_plans": [
+      {
+        "plan_id": "plan-shift-capacity-and-maintain",
+        "name": "完成在制后切换产能并安排维护",
+        "summary": "CNC-07 完成当前批次后停机，改由 CNC-09 与 CNC-12 承接高优订单。",
+        "assumptions": [
+          "刀具与夹具可以在短时内调拨到位",
+          "CNC-09/CNC-12 有可用窗口"
+        ],
+        "risk_level": "high",
+        "estimated_delivery_impact": "16:00 交期可控",
+        "estimated_quality_impact": "及时隔离 CNC-07 对 B 线 CPK 的持续拖累",
+        "estimated_capacity_impact": "产能转移后整体负载更均衡"
+      },
+      {
+        "plan_id": "plan-keep-cnc07-running",
+        "name": "保持 CNC-07 连续生产",
+        "summary": "继续使用 CNC-07 承接插单，暂不进行维护。",
+        "assumptions": [
+          "振动未继续恶化",
+          "CPK 波动可在线纠偏"
+        ],
+        "risk_level": "high",
+        "estimated_delivery_impact": "短期产出最大",
+        "estimated_quality_impact": "B 线质量扩散风险高",
+        "estimated_capacity_impact": "对单机依赖过强"
+      }
+    ],
+    "recommended_actions": [
+      {
+        "action_id": "act-maint-cnc07-spindle",
+        "action_type": "maintenance_work_order",
+        "target_system": "MRO",
+        "target_entity": "CNC-07",
+        "summary": "创建 CNC-07 主轴轴承更换工单",
+        "risk_level": "high",
+        "requires_human_review": true,
+        "payload_preview": {
+          "machine_id": "CNC-07",
+          "component": "spindle_bearing",
+          "downtime_hours": 3
+        }
+      },
+      {
+        "action_id": "act-transfer-tooling",
+        "action_type": "tooling_transfer",
+        "target_system": "MRO",
+        "target_entity": "phi32-mill",
+        "summary": "紧急调拨 CNC-12 所需 φ32 铣刀与夹具",
+        "risk_level": "low",
+        "requires_human_review": false,
+        "payload_preview": {
+          "tool": "phi32-mill",
+          "destination_machine": "CNC-12"
+        }
+      }
+    ]
+  }
+}

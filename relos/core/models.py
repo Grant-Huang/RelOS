@@ -231,6 +231,114 @@ class Node(BaseModel):
 
 
 # ─────────────────────────────────────────────
+# 复杂场景模型（Phase 1）
+# ─────────────────────────────────────────────
+
+class RiskLevel(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class DecisionPackageStatus(StrEnum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SHADOW_PLANNED = "shadow_planned"
+    EXECUTED = "executed"
+    ROLLED_BACK = "rolled_back"
+
+
+class CompositeSubEvent(BaseModel):
+    event_id: str
+    event_type: str
+    source_system: str
+    occurred_at: str
+    entity_id: str
+    entity_type: str
+    severity: str = "medium"
+    summary: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompositeDisturbanceEvent(BaseModel):
+    incident_id: str
+    factory_id: str
+    scenario_type: str
+    priority: str = "medium"
+    goal: str
+    time_window_start: str
+    time_window_end: str
+    events: list[CompositeSubEvent] = Field(default_factory=list)
+
+
+class CandidatePlan(BaseModel):
+    plan_id: str
+    name: str
+    summary: str
+    assumptions: list[str] = Field(default_factory=list)
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+    estimated_delivery_impact: str = ""
+    estimated_quality_impact: str = ""
+    estimated_capacity_impact: str = ""
+
+
+class DecisionAction(BaseModel):
+    action_id: str
+    action_type: str
+    target_system: str
+    target_entity: str
+    summary: str
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+    requires_human_review: bool = True
+    payload_preview: dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionPackage(BaseModel):
+    decision_id: str
+    incident_id: str
+    title: str
+    incident_summary: str
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+    recommended_plan_id: str
+    candidate_plans: list[CandidatePlan] = Field(default_factory=list)
+    recommended_actions: list[DecisionAction] = Field(default_factory=list)
+    evidence_relations: list[dict[str, Any]] = Field(default_factory=list)
+    requires_human_review: bool = True
+    review_reason: str = ""
+    trace_id: str
+    status: DecisionPackageStatus = DecisionPackageStatus.DRAFT
+    context_block: str = ""
+    context_query_strategy: str = ""
+    context_relations_count: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DecisionReviewRecord(BaseModel):
+    decision_id: str
+    status: DecisionPackageStatus
+    reviewed_by: str
+    review_comment: str = ""
+    selected_plan_id: str
+    approved_actions: list[str] = Field(default_factory=list)
+    rejected_actions: list[str] = Field(default_factory=list)
+    reviewed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ActionBundle(BaseModel):
+    bundle_id: str
+    decision_id: str
+    status: DecisionPackageStatus = DecisionPackageStatus.DRAFT
+    actions: list[DecisionAction] = Field(default_factory=list)
+    shadow_mode: bool = True
+    execution_notes: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# ─────────────────────────────────────────────
 # 合并结果模型（Relation Core Engine 输出）
 # ─────────────────────────────────────────────
 

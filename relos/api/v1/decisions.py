@@ -11,10 +11,10 @@ relos/api/v1/decisions.py
 
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import UTC, datetime
 from typing import Any
-import uuid
-import json
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
@@ -24,8 +24,15 @@ from pydantic import BaseModel
 from relos.action.engine import ActionEngine, ActionRecord
 from relos.action.repository import ActionRepository
 from relos.config import settings
-from relos.core.models import RelationObject
+from relos.core.models import (
+    ActionBundle,
+    DecisionPackage,
+    DecisionPackageStatus,
+    DecisionReviewRecord,
+    RelationObject,
+)
 from relos.core.repository import RelationRepository
+from relos.decision.repository import DecisionRepository
 from relos.decision.workflow import DecisionState, get_decision_workflow
 
 router = APIRouter()
@@ -115,6 +122,26 @@ class ActionStatusResponse(BaseModel):
     shadow_mode: bool
     logs: list[dict[str, Any]]
     pre_flight_results: dict[str, Any]
+
+
+class DecisionReviewRequest(BaseModel):
+    reviewed_by: str
+    selected_plan_id: str
+    approved_actions: list[str] = []
+    rejected_actions: list[str] = []
+    review_comment: str = ""
+    approve: bool = True
+
+
+class PendingDecisionSummary(BaseModel):
+    decision_id: str
+    incident_id: str
+    title: str
+    risk_level: str
+    recommended_plan_id: str
+    requires_human_review: bool
+    review_reason: str
+    status: str
 
 
 @router.post("/analyze-alarm", response_model=RootCauseRecommendation)
@@ -373,6 +400,80 @@ async def get_action_status(action_id: str, request: Request) -> ActionStatusRes
     if not action:
         raise HTTPException(status_code=404, detail=f"Action {action_id} not found")
     return _build_action_response(action)
+
+
+@router.get("/pending-review", response_model=list[PendingDecisionSummary])
+async def get_pending_review_decisions(request: Request) -> list[PendingDecisionSummary]:
+    """获取决策级 HITL 队列，与关系审核队列分离。"""
+    repo = DecisionRepository(request.app.state.neo4j_driver)
+    packages = await repo.list_pending_review(limit=20)
+    return [
+        PendingDecisionSummary(
+            decision_id=package.decision_id,
+            incident_id=package.incident_id,
+            title=package.title,
+            risk_level=package.risk_level.value,
+            recommended_plan_id=package.recommended_plan_id,
+            requires_human_review=package.requires_human_review,
+            review_reason=package.review_reason,
+            status=package.status.value,
+        )
+        for package in packages
+    ]
+
+
+@router.post("/{decision_id}/review", response_model=DecisionPackage)
+async def review_decision_package(
+    decision_id: str,
+    body: DecisionReviewRequest,
+    request: Request,
+) -> DecisionPackage:
+    repo = DecisionRepository(request.app.state.neo4j_driver)
+    package = await repo.get_decision_package_by_id(decision_id)
+    if not package:
+        raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found")
+
+    new_status = (
+        DecisionPackageStatus.APPROVED if body.approve else DecisionPackageStatus.REJECTED
+    )
+    review_record = DecisionReviewRecord(
+        decision_id=decision_id,
+        status=new_status,
+        reviewed_by=body.reviewed_by,
+        review_comment=body.review_comment,
+        selected_plan_id=body.selected_plan_id,
+        approved_actions=body.approved_actions,
+        rejected_actions=body.rejected_actions,
+    )
+    await repo.save_review(review_record)
+
+    package.recommended_plan_id = body.selected_plan_id
+    package.status = new_status
+    package.updated_at = datetime.now(UTC)
+    if body.approve:
+        package.review_reason = body.review_comment or "已完成人工确认，进入 Shadow 动作规划"
+    else:
+        package.review_reason = body.review_comment or "方案被人工驳回，等待重新分析"
+    await repo.save_decision_package(package)
+
+    bundle = await repo.get_action_bundle(decision_id)
+    if bundle:
+        bundle.status = (
+            DecisionPackageStatus.SHADOW_PLANNED if body.approve else DecisionPackageStatus.REJECTED
+        )
+        bundle.updated_at = datetime.now(UTC)
+        await repo.save_action_bundle(bundle)
+
+    return package
+
+
+@router.get("/{decision_id}/actions", response_model=ActionBundle)
+async def get_decision_actions(decision_id: str, request: Request) -> ActionBundle:
+    repo = DecisionRepository(request.app.state.neo4j_driver)
+    bundle = await repo.get_action_bundle(decision_id)
+    if not bundle:
+        raise HTTPException(status_code=404, detail=f"Action bundle for {decision_id} not found")
+    return bundle
 
 
 def _build_action_response(action: ActionRecord) -> ActionStatusResponse:

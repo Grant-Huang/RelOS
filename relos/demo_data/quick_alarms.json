@@ -3,18 +3,36 @@
     "code": "VIB-001",
     "device": "device-M1",
     "name": "1号机（注塑机）",
-    "desc": "振动超限"
+    "desc": "高温天气下振动超限，疑似主轴轴承磨损"
   },
   {
     "code": "TEMP-002",
     "device": "device-M2",
-    "name": "2号机（焊接机）",
-    "desc": "温度异常"
+    "name": "2号机（注塑机）",
+    "desc": "温度持续波动，需判断是否为冷却系统异常"
   },
   {
-    "code": "WELD-003",
-    "device": "device-M3",
-    "name": "3号机（M3）",
-    "desc": "焊接过热告警"
+    "code": "VIB-001",
+    "device": "device-M1",
+    "name": "1号机（注塑机）",
+    "desc": "连续三班重复振动告警，影响关键工单稳定交付"
+  },
+  {
+    "code": "TEMP-002",
+    "device": "device-M2",
+    "name": "2号机（注塑机）",
+    "desc": "夜班升温过快，怀疑冷却循环效率下降"
+  },
+  {
+    "code": "SMT-OFFSET-080",
+    "device": "machine-SMT-02",
+    "name": "SMT-02（贴片机）",
+    "desc": "半导体封装复合扰动：大客户插单、SMT-02偏移预警、0402电阻库存仅余1.5小时"
+  },
+  {
+    "code": "CNC-VIB-007",
+    "device": "machine-CNC-07",
+    "name": "CNC-07（精密机床）",
+    "desc": "汽车零部件复合扰动：插单保交付同时出现CNC-07振动预警与B线CPK连续下滑"
   }
 ]

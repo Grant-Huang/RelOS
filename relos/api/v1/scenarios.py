@@ -19,12 +19,22 @@ relos/api/v1/scenarios.py
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from neo4j import AsyncDriver
 from pydantic import BaseModel
+
+from relos.core.models import CompositeDisturbanceEvent, DecisionPackage
+from relos.core.repository import RelationRepository
+from relos.decision.composite import (
+    build_action_bundle,
+    build_composite_context,
+    build_decision_package,
+)
+from relos.decision.repository import DecisionRepository
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -100,6 +110,17 @@ class StrategicSimulationResponse(BaseModel):
     recommendations: list[str]
     causal_chain: list[str]
     confidence: float
+
+
+class CompositeIncidentSummaryResponse(BaseModel):
+    incident_id: str
+    decision_id: str
+    title: str
+    risk_level: str
+    status: str
+    recommended_plan_id: str
+    requires_human_review: bool
+    updated_at: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -705,3 +726,90 @@ async def run_strategic_simulation(
         causal_chain=causal_chain,
         confidence=round(avg_confidence, 2),
     )
+
+
+@router.post("/composite-disturbance/analyze", response_model=DecisionPackage)
+async def analyze_composite_disturbance(
+    body: CompositeDisturbanceEvent,
+    request: Request,
+) -> DecisionPackage:
+    """
+    复合扰动分析入口：
+    1. 汇总多个子事件的子图关系
+    2. 构建统一 ContextBlock
+    3. 生成 DecisionPackage 与 Shadow ActionBundle
+    4. 持久化供 HITL 与 AgentNexus 查询
+    """
+    relation_repo = RelationRepository(request.app.state.neo4j_driver)
+    decision_repo = DecisionRepository(request.app.state.neo4j_driver)
+
+    merged_relations: dict[str, Any] = {}
+    for event in body.events:
+        if not event.entity_id:
+            continue
+        relations = await relation_repo.get_subgraph(
+            center_node_id=event.entity_id,
+            max_hops=2,
+            min_confidence=0.25,
+        )
+        for relation in relations:
+            merged_relations[relation.id] = relation
+
+    relations_list = list(merged_relations.values())
+    context_block = build_composite_context(body, relations_list)
+    decision_package = build_decision_package(body, relations_list, context_block)
+    action_bundle = build_action_bundle(decision_package)
+
+    await decision_repo.save_decision_package(decision_package)
+    await decision_repo.save_action_bundle(action_bundle)
+
+    logger.info(
+        "composite_disturbance_analyzed",
+        incident_id=body.incident_id,
+        scenario_type=body.scenario_type,
+        decision_id=decision_package.decision_id,
+        relation_count=len(relations_list),
+    )
+    return decision_package
+
+
+@router.get(
+    "/composite-disturbance/{incident_id}",
+    response_model=DecisionPackage,
+)
+async def get_composite_disturbance_result(
+    incident_id: str,
+    request: Request,
+) -> DecisionPackage:
+    decision_repo = DecisionRepository(request.app.state.neo4j_driver)
+    package = await decision_repo.get_decision_package(incident_id)
+    if not package:
+        raise HTTPException(status_code=404, detail=f"incident {incident_id} not found")
+    return package
+
+
+@router.get(
+    "/composite-disturbance",
+    response_model=list[CompositeIncidentSummaryResponse],
+)
+async def list_composite_disturbances(request: Request) -> list[CompositeIncidentSummaryResponse]:
+    decision_repo = DecisionRepository(request.app.state.neo4j_driver)
+    packages = await decision_repo.list_pending_review(limit=50)
+    rows: list[CompositeIncidentSummaryResponse] = []
+    for package in packages:
+        updated_at = package.updated_at
+        if not isinstance(updated_at, datetime):
+            updated_at = datetime.now(UTC)
+        rows.append(
+            CompositeIncidentSummaryResponse(
+                incident_id=package.incident_id,
+                decision_id=package.decision_id,
+                title=package.title,
+                risk_level=package.risk_level.value,
+                status=package.status.value,
+                recommended_plan_id=package.recommended_plan_id,
+                requires_human_review=package.requires_human_review,
+                updated_at=updated_at.isoformat(),
+            )
+        )
+    return rows

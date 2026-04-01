@@ -149,6 +149,50 @@
       "reasoning": "交接班记录指明了设备异常处理的负责人"
     }
   ],
+  "semiconductor_composite": [
+    {
+      "source_node_name": "SMT-02",
+      "source_node_type": "Machine",
+      "target_node_name": "送料器齿轮磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.76,
+      "evidence": "历史维修摘要：SMT-02 在贴装偏移接近工艺上限时，多次通过更换送料器齿轮恢复稳定。",
+      "reasoning": "文本同时包含设备、异常模式和处理结果，可抽取为设备到故障模式关系"
+    },
+    {
+      "source_node_name": "0402 电阻卷料",
+      "source_node_type": "MaterialLot",
+      "target_node_name": "BGA 封装工序",
+      "target_node_type": "Process",
+      "relation_type": "MATERIAL__DEPLETES__PROCESS",
+      "confidence": 0.81,
+      "evidence": "物料预警：SMT-02 所需 0402 电阻库存仅余约 1.5 小时用量。",
+      "reasoning": "文段明确指出物料短缺会直接约束对应工序"
+    }
+  ],
+  "auto_composite": [
+    {
+      "source_node_name": "CNC-07",
+      "source_node_type": "Machine",
+      "target_node_name": "主轴轴承早期磨损",
+      "target_node_type": "FailureMode",
+      "relation_type": "MACHINE__HAS__FAILURE_MODE",
+      "confidence": 0.78,
+      "evidence": "维护 Agent 结论：CNC-07 振动特征与主轴轴承早期磨损高度一致。",
+      "reasoning": "描述中已经给出设备异常模式与历史故障匹配结论"
+    },
+    {
+      "source_node_name": "CNC-07",
+      "source_node_type": "Machine",
+      "target_node_name": "B线 CPK 下降",
+      "target_node_type": "QualityMetric",
+      "relation_type": "MACHINE__IMPACTS__QUALITY",
+      "confidence": 0.74,
+      "evidence": "质量 Agent 验证 CNC-07 振动异常与 B线 最近 6 小时 CPK 下降存在关联。",
+      "reasoning": "文本包含设备状态对质量指标的影响关系"
+    }
+  ],
   "unknown": [
     {
       "source_node_name": "设备",
